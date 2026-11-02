@@ -183,7 +183,7 @@ fun ChatScreen(
                             val mine = m.senderId == myId
                             val showDate = older == null || older.localDay() != m.localDay()
                             val showName = isGroup && !mine &&
-                                (showDate || older?.senderId != m.senderId)
+                                (showDate || older.senderId != m.senderId)
 
                             MessageRow(
                                 m = m,

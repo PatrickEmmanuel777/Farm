@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.farmproject.data.model.CreateEmployeeRequest
 import com.example.farmproject.data.model.EmployeeDisplay
 import com.example.farmproject.data.model.ProvisionResult
+import com.example.farmproject.data.model.SupervisorDuty
 import com.example.farmproject.data.repository.EmployeeRepository
+import com.example.farmproject.data.repository.SupervisorDutyRepository
 import com.example.farmproject.data.session.CurrentSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +31,8 @@ sealed interface EmployeeSaveState {
 }
 
 class EmployeesViewModel(
-    private val repository: EmployeeRepository = EmployeeRepository()
+    private val repository: EmployeeRepository = EmployeeRepository(),
+    private val dutyRepository: SupervisorDutyRepository = SupervisorDutyRepository()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<EmployeesUiState>(EmployeesUiState.Loading)
@@ -43,22 +46,41 @@ class EmployeesViewModel(
     }
 
     fun loadEmployees() {
+        val currentSuccess = _uiState.value as? EmployeesUiState.Success
         viewModelScope.launch {
-            _uiState.value = EmployeesUiState.Loading
+            if (currentSuccess == null) {
+                _uiState.value = EmployeesUiState.Loading
+            }
             try {
                 val farmId = CurrentSession.farmId
                 val supervisors = repository.getSupervisorsForFarm(farmId)
                 val workers = repository.getWorkersForFarm(farmId)
                 _uiState.value = EmployeesUiState.Success(supervisors, workers)
             } catch (e: Exception) {
-                _uiState.value = EmployeesUiState.Error(e.message ?: "Failed to load employees")
+                if (currentSuccess == null) {
+                    _uiState.value = EmployeesUiState.Error(e.message ?: "Failed to load employees")
+                }
             }
         }
     }
 
-    fun addSupervisor(fullName: String, email: String, phoneNumber: String?, employeeNumber: String?, password: String? = null) {
+    fun addSupervisor(
+        fullName: String,
+        email: String,
+        phoneNumber: String?,
+        employeeNumber: String?,
+        password: String? = null,
+        duties: Set<SupervisorDuty> = setOf(SupervisorDuty.ATTENDANCE)
+    ) {
         createEmployee(fullName, email, phoneNumber, employeeNumber, password) { request ->
-            repository.createSupervisor(request)
+            val result = repository.createSupervisor(request)
+            if (result is ProvisionResult.Success) {
+                val createdAccId = (result.data as? EmployeeDisplay)?.accountId
+                if (!createdAccId.isNullOrBlank()) {
+                    runCatching { dutyRepository.setDuties(createdAccId, duties) }
+                }
+            }
+            result
         }
     }
 
@@ -68,7 +90,6 @@ class EmployeesViewModel(
         }
     }
 
-    /** [onDeleted] runs after the delete succeeded and the list has been reloaded. */
     fun deleteSupervisorProfile(profileId: String, onDeleted: () -> Unit = {}) {
         viewModelScope.launch {
             try {
@@ -102,8 +123,6 @@ class EmployeesViewModel(
         isSupervisor: Boolean
     ) {
         viewModelScope.launch {
-            // repository.updateEmployee returns a Result and does not throw, so the
-            // failure has to be read from the Result (the old try/catch never fired).
             repository.updateEmployee(
                 accountId = accountId,
                 profileId = profileId,
@@ -128,7 +147,7 @@ class EmployeesViewModel(
         password: String?,
         create: suspend (CreateEmployeeRequest) -> ProvisionResult<*>
     ) {
-        if (_saveState.value is EmployeeSaveState.Saving) return // ignore double taps
+        if (_saveState.value is EmployeeSaveState.Saving) return
 
         viewModelScope.launch {
             _saveState.value = EmployeeSaveState.Saving

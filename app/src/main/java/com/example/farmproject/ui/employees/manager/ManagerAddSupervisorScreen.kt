@@ -5,7 +5,9 @@ import android.content.Intent
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +35,10 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -63,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.farmproject.data.model.SupervisorDuty
 
 private const val MIN_PASSWORD_LENGTH = 8
 
@@ -76,9 +83,10 @@ fun ManagerAddSupervisorScreen(
         email: String,
         phoneNumber: String?,
         employeeNumber: String?,
-        password: String
-    ) -> Unit = { name, mail, phone, empNum, pass ->
-        viewModel.addSupervisor(name, mail, phone, empNum, pass)
+        password: String,
+        duties: Set<SupervisorDuty>
+    ) -> Unit = { name, mail, phone, empNum, pass, duties ->
+        viewModel.addSupervisor(name, mail, phone, empNum, pass, duties)
     }
 ) {
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
@@ -100,6 +108,7 @@ fun ManagerAddSupervisorScreen(
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var employeeNumber by remember { mutableStateOf("") }
+    var selectedDuties by remember { mutableStateOf(setOf(SupervisorDuty.ATTENDANCE)) }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -149,10 +158,10 @@ fun ManagerAddSupervisorScreen(
     }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Color(0xFF1565C0),
+        focusedBorderColor = Color(0xFF1B5E20),
         unfocusedBorderColor = Color(0xFFBDBDBD),
-        focusedLabelColor = Color(0xFF1565C0),
-        cursorColor = Color(0xFF1565C0)
+        focusedLabelColor = Color(0xFF1B5E20),
+        cursorColor = Color(0xFF1B5E20)
     )
 
     Scaffold(
@@ -161,7 +170,7 @@ fun ManagerAddSupervisorScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1565C0))
+                    .background(Color(0xFF1B5E20))
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -184,7 +193,7 @@ fun ManagerAddSupervisorScreen(
                     )
 
                     Text(
-                        text = "Register a new supervisor",
+                        text = "Register a new supervisor with duties",
                         color = Color.White.copy(alpha = 0.85f),
                         fontSize = 12.sp
                     )
@@ -311,6 +320,78 @@ fun ManagerAddSupervisorScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
+            // SUPERVISOR ROLES & DUTIES (MULTI-SELECT)
+            SectionTitle(
+                icon = Icons.Default.Badge,
+                title = "Supervisor Roles & Duty Assignments *"
+            )
+
+            Text(
+                text = "Select one or more duties to grant this supervisor access to those features:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SupervisorDuty.entries.forEach { duty ->
+                    val isChecked = duty in selectedDuties
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedDuties = if (isChecked) {
+                                    if (selectedDuties.size > 1) selectedDuties - duty else selectedDuties
+                                } else {
+                                    selectedDuties + duty
+                                }
+                            },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isChecked) Color(0xFFE8F5E9) else Color.White
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (isChecked) Color(0xFF1B5E20) else Color(0xFFE0E0E0)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = { checked ->
+                                    selectedDuties = if (checked) {
+                                        selectedDuties + duty
+                                    } else {
+                                        if (selectedDuties.size > 1) selectedDuties - duty else selectedDuties
+                                    }
+                                },
+                                colors = CheckboxDefaults.colors(checkedColor = Color(0xFF1B5E20))
+                            )
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = duty.label,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isChecked) Color(0xFF1B5E20) else Color(0xFF1A1D1A)
+                                )
+                                Text(
+                                    text = duty.description,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF6E7068)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             SectionTitle(
                 icon = Icons.Default.Lock,
                 title = "Account Credentials"
@@ -385,7 +466,8 @@ fun ManagerAddSupervisorScreen(
                             trimmedEmail,
                             trimmedPhone,
                             trimmedEmpNum,
-                            password
+                            password,
+                            selectedDuties
                         )
                     }
                 },
@@ -395,7 +477,7 @@ fun ManagerAddSupervisorScreen(
                     .height(54.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1565C0)
+                    containerColor = Color(0xFF1B5E20)
                 )
             ) {
                 if (isSaving) {
@@ -441,7 +523,7 @@ private fun SectionTitle(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF1565C0),
+            tint = Color(0xFF1B5E20),
             modifier = Modifier.size(22.dp)
         )
 

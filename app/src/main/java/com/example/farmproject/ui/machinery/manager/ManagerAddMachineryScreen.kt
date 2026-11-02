@@ -19,19 +19,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
@@ -49,8 +50,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -87,7 +86,6 @@ fun ManagerAddMachineryScreen(
     var registrationNumber by remember { mutableStateOf("") }
     var purchaseDate by remember { mutableStateOf("") }
     var condition by remember { mutableStateOf("") }
-    var hourMeter by remember { mutableStateOf("") }
     var fuelType by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
 
@@ -122,10 +120,10 @@ fun ManagerAddMachineryScreen(
     )
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Color(0xFF1565C0),
+        focusedBorderColor = Color(0xFF1B5E20),
         unfocusedBorderColor = Color(0xFFBDBDBD),
-        focusedLabelColor = Color(0xFF1565C0),
-        cursorColor = Color(0xFF1565C0)
+        focusedLabelColor = Color(0xFF1B5E20),
+        cursorColor = Color(0xFF1B5E20)
     )
 
     Scaffold(
@@ -134,7 +132,7 @@ fun ManagerAddMachineryScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1565C0))
+                    .background(Color(0xFF1B5E20))
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -143,7 +141,7 @@ fun ManagerAddMachineryScreen(
                     onClick = onBackClick
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White
                     )
@@ -218,7 +216,7 @@ fun ManagerAddMachineryScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Machinery Type") },
                     placeholder = { Text("Select machinery type") },
                     leadingIcon = {
@@ -320,7 +318,7 @@ fun ManagerAddMachineryScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Current Condition") },
                     placeholder = { Text("Select condition") },
                     leadingIcon = {
@@ -373,7 +371,7 @@ fun ManagerAddMachineryScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Fuel Type") },
                     placeholder = { Text("Select fuel type") },
                     leadingIcon = {
@@ -418,7 +416,7 @@ fun ManagerAddMachineryScreen(
             // ---------------------------------------------------------
 
             SectionTitle(
-                icon = Icons.Default.Notes,
+                icon = Icons.AutoMirrored.Filled.Notes,
                 title = "Additional Information"
             )
 
@@ -434,7 +432,7 @@ fun ManagerAddMachineryScreen(
                 },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Default.Notes,
+                        imageVector = Icons.AutoMirrored.Filled.Notes,
                         contentDescription = null
                     )
                 },
@@ -469,7 +467,7 @@ fun ManagerAddMachineryScreen(
                     .height(54.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1565C0)
+                    containerColor = Color(0xFF1B5E20)
                 )
             ) {
 
@@ -506,7 +504,7 @@ private fun SectionTitle(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF1565C0),
+            tint = Color(0xFF1B5E20),
             modifier = Modifier.size(22.dp)
         )
 

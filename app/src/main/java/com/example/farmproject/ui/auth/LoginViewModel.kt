@@ -43,6 +43,7 @@ class LoginViewModel(
         }
     }
 
+    @Suppress("unused")
     fun resetState() {
         _uiState.value = LoginUiState.Idle
     }

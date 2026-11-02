@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.farmproject.data.model.AttendanceRecord
+import com.example.farmproject.data.model.ClockRequest
+import com.example.farmproject.data.model.ClockRequestStatus
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,6 +121,7 @@ fun SelfAttendanceScreen(
 
                 is SelfAttendanceUiState.Success -> {
                     val todayRecord = state.todayRecord
+                    val pendingClockRequest = state.pendingClockRequest
                     val history = state.history
 
                     LazyColumn(
@@ -135,6 +138,7 @@ fun SelfAttendanceScreen(
                                 name = state.name,
                                 role = state.role,
                                 record = todayRecord,
+                                pendingClockRequest = pendingClockRequest,
                                 onClockIn = { viewModel.clockInSelf() },
                                 onClockOut = {
                                     viewModel.clockOutSelf(
@@ -192,6 +196,7 @@ private fun TodayClockInCard(
     name: String,
     role: String,
     record: AttendanceRecord?,
+    pendingClockRequest: ClockRequest?,
     onClockIn: () -> Unit,
     onClockOut: () -> Unit,
     onMarkAbsent: () -> Unit,
@@ -199,21 +204,33 @@ private fun TodayClockInCard(
     onUndoAway: () -> Unit
 ) {
     val todayDateStr = LocalDate.now().toString()
-    val statusText = record?.displayStatus ?: "Not Clocked In"
+
+    val isPendingApproval = record == null && pendingClockRequest?.status == ClockRequestStatus.PENDING
+    val isRejected = record == null && pendingClockRequest?.status == ClockRequestStatus.REJECTED
+
+    val statusText = when {
+        record != null -> record.displayStatus
+        isPendingApproval -> "Pending Approval"
+        isRejected -> "Rejected"
+        else -> "Not Clocked In"
+    }
+
     val isAway = statusText.lowercase() == "absent" || statusText.lowercase() == "on leave"
 
     val statusBgColor = when (statusText.lowercase()) {
-        "present" -> Color(0xFFE8F5E9)
+        "present", "clocked in" -> Color(0xFFE8F5E9)
+        "pending approval" -> Color(0xFFFFF8E1)
         "late" -> Color(0xFFFFF3E0)
-        "absent" -> Color(0xFFFFEBEE)
+        "absent", "rejected" -> Color(0xFFFFEBEE)
         "on leave" -> Color(0xFFF3E5F5)
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
 
     val statusTextColor = when (statusText.lowercase()) {
-        "present" -> Color(0xFF2E7D32)
+        "present", "clocked in" -> Color(0xFF2E7D32)
+        "pending approval" -> Color(0xFFF57F17)
         "late" -> Color(0xFFE65100)
-        "absent" -> Color(0xFFC62828)
+        "absent", "rejected" -> Color(0xFFC62828)
         "on leave" -> Color(0xFF6A1B9A)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -306,6 +323,20 @@ private fun TodayClockInCard(
                     ) {
                         Text("Clock In Instead")
                     }
+                } else if (isPendingApproval) {
+                    Button(
+                        onClick = {},
+                        enabled = false,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            disabledContainerColor = Color(0xFFFFF8E1),
+                            disabledContentColor = Color(0xFFF57F17)
+                        )
+                    ) {
+                        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Pending Approval", fontWeight = FontWeight.Bold)
+                    }
                 } else if (record?.checkIn == null) {
                     Button(
                         onClick = onClockIn,
@@ -334,29 +365,33 @@ private fun TodayClockInCard(
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Not working today?",
+                        text = if (isPendingApproval) "Clock-in requested. Waiting for approval." else "Not working today?",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    OutlinedButton(
-                        onClick = onMarkAbsent,
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("Absent", fontSize = 11.sp)
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    OutlinedButton(
-                        onClick = onMarkLeave,
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("On Leave", fontSize = 11.sp)
+
+                    if (!isPendingApproval) {
+                        Row {
+                            OutlinedButton(
+                                onClick = onMarkAbsent,
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Absent", fontSize = 11.sp)
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            OutlinedButton(
+                                onClick = onMarkLeave,
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("On Leave", fontSize = 11.sp)
+                            }
+                        }
                     }
                 }
             }

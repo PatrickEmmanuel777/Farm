@@ -20,7 +20,7 @@ sealed interface AttendanceUiState {
         val presentCount: Int,
         val lateCount: Int,
         val absentCount: Int,
-        val leaveCount: Int
+        val leaveCount: Int,
     ) : AttendanceUiState
     data class Error(val message: String) : AttendanceUiState
 }
@@ -60,7 +60,7 @@ class AttendanceViewModel(
                     presentCount = present,
                     lateCount = late,
                     absentCount = absent,
-                    leaveCount = leave
+                    leaveCount = leave,
                 )
             } catch (e: Exception) {
                 _uiState.value = AttendanceUiState.Error(e.message ?: "Failed to load attendance records")
@@ -68,6 +68,7 @@ class AttendanceViewModel(
         }
     }
 
+    @Suppress("unused")
     fun selectDate(date: LocalDate) {
         currentDate = date
         loadAttendance()
@@ -83,6 +84,7 @@ class AttendanceViewModel(
         loadAttendance()
     }
 
+    @Suppress("DEPRECATION", "unused")
     fun markAttendance(workerProfileId: String, status: String, notes: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             val farmId = CurrentSession.farmId
@@ -102,6 +104,7 @@ class AttendanceViewModel(
         }
     }
 
+    @Suppress("DEPRECATION", "unused")
     fun clockInWorker(workerProfileId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val farmId = CurrentSession.farmId
@@ -119,6 +122,7 @@ class AttendanceViewModel(
         }
     }
 
+    @Suppress("unused")
     fun clockOutWorker(attendanceId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val result = repository.clockOut(attendanceId)

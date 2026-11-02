@@ -17,13 +17,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Warehouse
 import androidx.compose.material3.Button
@@ -83,7 +83,7 @@ fun ManagerStorageDetailsScreen(
                     onClick = onBackClick
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White
                     )
@@ -245,7 +245,7 @@ fun ManagerStorageDetailsScreen(
             // ---------------------------------------------------------
 
             SectionTitle(
-                icon = Icons.Default.Notes,
+                icon = Icons.AutoMirrored.Filled.Notes,
                 title = "Additional Information"
             )
 

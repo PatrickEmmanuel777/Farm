@@ -2,15 +2,18 @@
 
 package com.example.farmproject.ui.reports.manager
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.farmproject.data.model.CropYieldSummary
+import com.example.farmproject.data.model.ExpenseSummary
+import com.example.farmproject.data.model.InventorySummary
 import com.example.farmproject.data.model.ReportCategoryStatus
 import com.example.farmproject.data.model.ReportRecord
 import com.example.farmproject.data.model.ReportSummary
+import com.example.farmproject.data.model.StorageSummary
 import com.example.farmproject.data.model.parseReportSummary
 import com.example.farmproject.data.repository.ReportRepository
 import com.example.farmproject.data.session.CurrentSession
-
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,12 +29,16 @@ data class ReportDetail(
 data class ReportsUiState(
     val isLoading: Boolean = true,
     val categories: List<ReportCategoryStatus> = emptyList(),
+    val cropYieldSummary: CropYieldSummary? = null,
+    val expenseSummary: ExpenseSummary? = null,
+    val inventorySummary: InventorySummary? = null,
+    val storageSummary: StorageSummary? = null,
     val generatingCodes: Set<String> = emptySet(),
     val isGeneratingAll: Boolean = false,
     val detail: ReportDetail? = null,
     val message: String? = null,       // one-shot error/info for a snackbar
 ) {
-    /** "5 Report categories available" */
+    /** "4 Report categories available" */
     val categoryCount: Int get() = categories.size
 }
 
@@ -54,11 +61,24 @@ class ReportsViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             val farmId = activeFarmId
-            runCatching { repository.getCategories(farmId) }
-                .onSuccess { list -> _state.update { it.copy(isLoading = false, categories = list) } }
-                .onFailure { e ->
-                    _state.update { it.copy(isLoading = false, message = e.message ?: "Could not load reports") }
-                }
+
+            val categoriesResult = runCatching { repository.getCategories(farmId) }.getOrDefault(emptyList())
+
+            val cropYieldSummary = runCatching { repository.fetchLiveSummary(farmId, "crop_yield") as? CropYieldSummary }.getOrNull()
+            val expenseSummary = runCatching { repository.fetchLiveSummary(farmId, "expenses") as? ExpenseSummary }.getOrNull()
+            val inventorySummary = runCatching { repository.fetchLiveSummary(farmId, "inventory") as? InventorySummary }.getOrNull()
+            val storageSummary = runCatching { repository.fetchLiveSummary(farmId, "storage") as? StorageSummary }.getOrNull()
+
+            _state.update {
+                it.copy(
+                    isLoading = false,
+                    categories = categoriesResult.ifEmpty { it.categories },
+                    cropYieldSummary = cropYieldSummary,
+                    expenseSummary = expenseSummary,
+                    inventorySummary = inventorySummary,
+                    storageSummary = storageSummary
+                )
+            }
         }
     }
 
@@ -104,10 +124,8 @@ class ReportsViewModel(
     ) {
         viewModelScope.launch {
             val farmId = activeFarmId
-            val categories = if (_state.value.categories.isEmpty()) {
+            val categories = _state.value.categories.ifEmpty {
                 runCatching { repository.getCategories(farmId) }.getOrDefault(emptyList())
-            } else {
-                _state.value.categories
             }
             val code = normalizeCategoryCode(titleOrCode)
             val category = categories.firstOrNull { it.code.equals(code, ignoreCase = true) }
@@ -162,10 +180,8 @@ class ReportsViewModel(
     fun openByTitleOrCode(titleOrCode: String) {
         viewModelScope.launch {
             val farmId = activeFarmId
-            val categories = if (_state.value.categories.isEmpty()) {
+            val categories = _state.value.categories.ifEmpty {
                 runCatching { repository.getCategories(farmId) }.getOrDefault(emptyList())
-            } else {
-                _state.value.categories
             }
             val code = normalizeCategoryCode(titleOrCode)
             val category = categories.firstOrNull { it.code.equals(code, ignoreCase = true) }
@@ -182,9 +198,8 @@ class ReportsViewModel(
         ReportDetail(category, this, parseReportSummary(category.code, summary))
 
     private fun normalizeCategoryCode(input: String): String = when {
-        input.contains("Inventory", ignoreCase = true) || input.equals("inventory", ignoreCase = true) -> "inventory"
-        input.contains("Machinery", ignoreCase = true) || input.equals("machinery", ignoreCase = true) -> "machinery"
-        input.contains("Workforce", ignoreCase = true) || input.equals("workforce", ignoreCase = true) -> "workforce"
+        input.contains("Inventory", ignoreCase = true) || input.contains("Resource", ignoreCase = true) || input.equals("inventory", ignoreCase = true) -> "inventory"
+        input.contains("Expense", ignoreCase = true) || input.equals("expenses", ignoreCase = true) -> "expenses"
         input.contains("Storage", ignoreCase = true) || input.equals("storage", ignoreCase = true) -> "storage"
         else -> "crop_yield"
     }
@@ -192,8 +207,7 @@ class ReportsViewModel(
     private fun createFallbackCategory(farmId: String, code: String): ReportCategoryStatus {
         val (name, desc) = when (code) {
             "inventory" -> "Resources Report" to "Stock levels, usage and reorder alerts"
-            "machinery" -> "Machinery Report" to "Equipment usage, condition and maintenance"
-            "workforce" -> "Workforce Report" to "Attendance and task completion by employee"
+            "expenses" -> "Farm Expenses Report" to "Operational costs, category breakdowns and supplier payments"
             "storage" -> "Storage Report" to "Stored produce, capacity and condition"
             else -> "Crop Yield Report" to "Planting, growth stage and harvest summaries"
         }

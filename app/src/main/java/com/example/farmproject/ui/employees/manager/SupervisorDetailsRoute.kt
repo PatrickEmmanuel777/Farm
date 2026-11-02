@@ -6,10 +6,14 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.farmproject.data.repository.SupervisorDutyRepository
 
 @Composable
 fun SupervisorDetailsRoute(
@@ -36,9 +40,23 @@ fun SupervisorDetailsRoute(
         ?.supervisors
         ?.firstOrNull { it.profileId == profileId }
 
+    val supervisorAccountId = employee?.accountId.orEmpty()
+    var supervisorDutiesLabel by remember { mutableStateOf("Attendance Supervisor") }
+
+    LaunchedEffect(supervisorAccountId) {
+        if (supervisorAccountId.isNotBlank()) {
+            val dutiesResult = SupervisorDutyRepository().getMyDuties(supervisorAccountId)
+            val duties = dutiesResult.getOrDefault(emptySet())
+            if (duties.isNotEmpty()) {
+                supervisorDutiesLabel = duties.joinToString(" · ") { it.label }
+            }
+        }
+    }
+
     ManagerEmployeeDetailsScreen(
         employee = employee,
         roleLabel = "Supervisor",
+        dutiesLabel = supervisorDutiesLabel,
         onBackClick = onBackClick,
         onUpdateSave = { name, phone, employeeNumber ->
             employee?.let {

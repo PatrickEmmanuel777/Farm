@@ -63,7 +63,7 @@ class InventoryViewModel(
                 _divisions.value = divisions
 
                 val items = repository.getInventoryForFarm(farmId)
-                val issuances = repository.getStockIssuancesForFarm(farmId, divisions, items)
+                val issuances = repository.getStockIssuanceForFarm(farmId, divisions, items)
                 _uiState.value = InventoryUiState.Success(items = items, issuances = issuances)
             } catch (e: Exception) {
                 _uiState.value = InventoryUiState.Error(e.message ?: "Failed to load inventory")

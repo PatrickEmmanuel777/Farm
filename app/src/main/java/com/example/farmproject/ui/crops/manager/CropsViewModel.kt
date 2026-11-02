@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.farmproject.data.model.Crop
 import com.example.farmproject.data.repository.CropRepository
+import com.example.farmproject.data.session.CurrentSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,7 +41,8 @@ class CropsViewModel(
         viewModelScope.launch {
             _uiState.value = CropsUiState.Loading
             try {
-                val crops = repository.getCropCatalog()
+                val farmId = CurrentSession.farmId
+                val crops = repository.getCropsForFarm(farmId).getOrDefault(emptyList())
                 _uiState.value = CropsUiState.Success(crops)
             } catch (e: Exception) {
                 _uiState.value = CropsUiState.Error(e.message ?: "Failed to load crops")

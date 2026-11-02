@@ -24,6 +24,7 @@ data class ChatListState(
     val error: String? = null,
 ) {
     /** Handy for a bottom-tab badge. */
+    @Suppress("unused")
     val totalUnread: Long get() = conversations.sumOf { it.unreadCount }
 }
 

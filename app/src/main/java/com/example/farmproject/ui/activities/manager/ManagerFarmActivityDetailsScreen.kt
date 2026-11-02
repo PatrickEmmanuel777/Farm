@@ -18,15 +18,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Agriculture
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.HourglassTop
-import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
@@ -45,13 +44,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -92,6 +88,7 @@ fun ManagerFarmActivityDetailsScreen(
     equipmentNeeded: String? = null,
     workers: List<EmployeeDisplay> = emptyList(),
     supervisors: List<EmployeeDisplay> = emptyList(),
+    isManagerRole: Boolean = true,
     onBackClick: () -> Unit = {},
     onStartClick: () -> Unit = {},
     onCompleteClick: () -> Unit = {},
@@ -111,6 +108,10 @@ fun ManagerFarmActivityDetailsScreen(
             status.equals("completed", ignoreCase = true) ||
             status.equals("Done", ignoreCase = true)
 
+    val isInProgress = status.equals("In Progress", ignoreCase = true) ||
+            status.equals("in_progress", ignoreCase = true) ||
+            status.equals("Ongoing", ignoreCase = true)
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -123,7 +124,7 @@ fun ManagerFarmActivityDetailsScreen(
             ) {
                 IconButton(onClick = onBackClick) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White
                     )
@@ -148,7 +149,7 @@ fun ManagerFarmActivityDetailsScreen(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                if (!isCompleted) {
+                if (isManagerRole && !isCompleted) {
                     IconButton(onClick = onEditClick) {
                         Icon(
                             imageVector = Icons.Default.Edit,
@@ -249,7 +250,7 @@ fun ManagerFarmActivityDetailsScreen(
                             value = assignedTo
                         )
 
-                        if (!isCompleted && !isAlreadyAssignedToSpecificPerson) {
+                        if (isManagerRole && !isCompleted && !isAlreadyAssignedToSpecificPerson) {
                             OutlinedButton(
                                 onClick = { showAssignDialog = true },
                                 shape = RoundedCornerShape(20.dp)
@@ -322,7 +323,7 @@ fun ManagerFarmActivityDetailsScreen(
             }
 
             SectionTitle(
-                icon = Icons.Default.Notes,
+                icon = Icons.AutoMirrored.Filled.Notes,
                 title = "Additional Information"
             )
 
@@ -368,47 +369,98 @@ fun ManagerFarmActivityDetailsScreen(
                         )
                     }
                 }
-            }
-
-            // Edit & Delete Actions
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { showDeleteConfirmation = true },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Delete")
-                }
-
-                if (!isCompleted) {
+            } else if (!isManagerRole) {
+                // SUPERVISOR AND WORKER ACTION BUTTONS
+                if (isInProgress) {
                     Button(
-                        onClick = onEditClick,
+                        onClick = onCompleteClick,
                         modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp),
+                            .fillMaxWidth()
+                            .height(52.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1565C0)
+                            containerColor = Color(0xFF1B5E20)
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Edit,
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Complete Activity",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onStartClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1B5E20)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Begin Activity",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // MANAGER EDIT & DELETE ACTIONS
+            if (isManagerRole) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showDeleteConfirmation = true },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Edit Activity")
+                        Text("Delete")
+                    }
+
+                    if (!isCompleted) {
+                        Button(
+                            onClick = onEditClick,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF1565C0)
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Edit Activity")
+                        }
                     }
                 }
             }
@@ -472,7 +524,7 @@ private fun AssignActivityDialog(
 ) {
     var isSupervisorSelected by remember { mutableStateOf(false) }
     val currentEmployees = if (isSupervisorSelected) supervisors else workers
-    var selectedEmployee by remember { mutableStateOf<EmployeeDisplay?>(currentEmployees.firstOrNull()) }
+    var selectedEmployee by remember { mutableStateOf(currentEmployees.firstOrNull()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

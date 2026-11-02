@@ -67,6 +67,7 @@ import com.example.farmproject.data.model.SupervisorDetailsRow
 fun ManagerEmployeeDetailsScreen(
     employee: EmployeeDisplay?,
     roleLabel: String = "Supervisor",
+    dutiesLabel: String? = null,
     onBackClick: () -> Unit = {},
     onUpdateSave: (fullName: String, phone: String?, employeeNumber: String?) -> Unit = { _, _, _ -> },
     onDeleteClick: () -> Unit = {},
@@ -238,11 +239,19 @@ fun ManagerEmployeeDetailsScreen(
                             value = employee.phoneNumber ?: "Not set"
                         )
 
-                        DetailItemRow(
-                            icon = Icons.Default.Badge,
-                            label = "Employee Number",
-                            value = employee.employeeNumber ?: "Not set"
-                        )
+                        if (roleLabel.equals("Supervisor", ignoreCase = true)) {
+                            DetailItemRow(
+                                icon = Icons.Default.Badge,
+                                label = "Assigned Duties",
+                                value = dutiesLabel?.ifBlank { null } ?: "Attendance Supervisor"
+                            )
+                        } else {
+                            DetailItemRow(
+                                icon = Icons.Default.Badge,
+                                label = "Employee Number",
+                                value = employee.employeeNumber ?: "Not set"
+                            )
+                        }
 
                         DetailItemRow(
                             icon = Icons.Default.SupervisorAccount,

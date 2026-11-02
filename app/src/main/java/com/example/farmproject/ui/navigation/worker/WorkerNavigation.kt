@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
-import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -13,7 +15,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,18 +28,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.compose.runtime.remember
 import com.example.farmproject.data.repository.ChatRepository
 import com.example.farmproject.ui.activities.manager.FarmActivitiesUiState
 import com.example.farmproject.ui.activities.manager.FarmActivitiesViewModel
 import com.example.farmproject.ui.activities.manager.ManagerFarmActivityDetailsScreen
 import com.example.farmproject.ui.activities.worker.WorkerFarmActivitiesScreen
 import com.example.farmproject.ui.attendance.worker.WorkerAttendanceScreen
-import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.Settings
 import com.example.farmproject.ui.chat.ChatRoutes
 import com.example.farmproject.ui.chat.chatGraph
 import com.example.farmproject.ui.dashboard.worker.WorkerDashboardScreen
+import com.example.farmproject.ui.dashboard.worker.WorkerDashboardViewModel
 import com.example.farmproject.ui.more.worker.WorkerMoreScreen
 import com.example.farmproject.ui.notifications.manager.NotificationViewModel
 import com.example.farmproject.ui.notifications.worker.WorkerNotificationsScreen
@@ -48,22 +50,28 @@ private sealed class WorkerTab(
     val title: String,
     val icon: ImageVector
 ) {
-    data object Dashboard : WorkerTab(
+    data object Home : WorkerTab(
         route = "worker_tab_dashboard",
-        title = "Dashboard",
-        icon = Icons.Default.Dashboard
+        title = "Home",
+        icon = Icons.Default.Home
     )
 
-    data object Messages : WorkerTab(
+    data object Tasks : WorkerTab(
+        route = WorkerRoutes.ACTIVITIES,
+        title = "Tasks",
+        icon = Icons.AutoMirrored.Filled.Assignment
+    )
+
+    data object Attendance : WorkerTab(
+        route = WorkerRoutes.ATTENDANCE,
+        title = "Attendance",
+        icon = Icons.Default.CalendarMonth
+    )
+
+    data object Chat : WorkerTab(
         route = ChatRoutes.LIST,
-        title = "Messages",
+        title = "Chat",
         icon = Icons.Default.Forum
-    )
-
-    data object Settings : WorkerTab(
-        route = WorkerRoutes.SETTINGS,
-        title = "Settings",
-        icon = Icons.Default.Settings
     )
 
     data object More : WorkerTab(
@@ -90,9 +98,10 @@ fun WorkerNavigation(
     val chatRepository = remember { ChatRepository() }
 
     val tabs = listOf(
-        WorkerTab.Dashboard,
-        WorkerTab.Messages,
-        WorkerTab.Settings,
+        WorkerTab.Home,
+        WorkerTab.Tasks,
+        WorkerTab.Attendance,
+        WorkerTab.Chat,
         WorkerTab.More
     )
 
@@ -106,19 +115,23 @@ fun WorkerNavigation(
     val isFormScreen = currentRoute in formRoutes
 
     fun navigateToTab(route: String) {
+        val startRoute = navController.graph.findStartDestination().route
+        val isStart = route == startRoute
         navController.navigate(route) {
             popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
+                saveState = !isStart
             }
             launchSingleTop = true
-            restoreState = true
+            restoreState = !isStart
         }
     }
 
     Scaffold(
         bottomBar = {
             if (!isFormScreen) {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = Color(0xFFF2F6F1)
+                ) {
                     tabs.forEach { tab ->
                         NavigationBarItem(
                             selected = currentRoute == tab.route,
@@ -138,24 +151,28 @@ fun WorkerNavigation(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = WorkerTab.Dashboard.route,
+            startDestination = WorkerTab.Home.route,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // 1. DASHBOARD
-            composable(WorkerTab.Dashboard.route) {
+            // 1. HOME (DASHBOARD)
+            composable(WorkerTab.Home.route) {
+                val viewModel: WorkerDashboardViewModel = viewModel()
                 WorkerDashboardScreen(
+                    viewModel = viewModel,
+                    onTasksClick = { navigateToTab(WorkerTab.Tasks.route) },
+                    onChatClick = { navigateToTab(WorkerTab.Chat.route) },
                     onLogoutClick = onLogout
                 )
             }
 
-            // 2. ACTIVITIES
+            // 2. ACTIVITIES / TASKS
             composable(WorkerRoutes.ACTIVITIES) {
                 val viewModel: FarmActivitiesViewModel = viewModel()
                 WorkerFarmActivitiesScreen(
                     viewModel = viewModel,
-                    onBackClick = { navigateToTab(WorkerTab.Dashboard.route) },
+                    onBackClick = { navigateToTab(WorkerTab.Home.route) },
                     onActivityClick = { activityId ->
                         navController.navigate("worker_farm_activity_details/$activityId")
                     }
@@ -199,6 +216,7 @@ fun WorkerNavigation(
                     equipmentNeeded = display?.activity?.equipmentNeeded,
                     workers = formOptions.workers,
                     supervisors = formOptions.supervisors,
+                    isManagerRole = false,
                     onBackClick = { navController.popBackStack() },
                     onStartClick = { viewModel.startActivity(activityId) },
                     onCompleteClick = { viewModel.completeActivity(activityId) },
@@ -208,29 +226,39 @@ fun WorkerNavigation(
                 )
             }
 
-            // 3. MORE
+            // 3. ATTENDANCE
+            composable(WorkerRoutes.ATTENDANCE) {
+                WorkerAttendanceScreen(
+                    onBackClick = {
+                        if (!navController.popBackStack()) {
+                            navigateToTab(WorkerTab.Home.route)
+                        }
+                    }
+                )
+            }
+
+            // 4. MORE
             composable(WorkerTab.More.route) {
                 WorkerMoreScreen(
-                    onBackClick = { navigateToTab(WorkerTab.Dashboard.route) },
-                    onChatClick = { navController.navigate(ChatRoutes.LIST) },
+                    onBackClick = { navigateToTab(WorkerTab.Home.route) },
+                    onChatClick = { navigateToTab(WorkerTab.Chat.route) },
                     onAttendanceClick = { navController.navigate(WorkerRoutes.ATTENDANCE) },
                     onSettingsClick = { navController.navigate(WorkerRoutes.SETTINGS) },
                     onLogoutClick = onLogout
                 )
             }
 
-            composable(WorkerRoutes.ATTENDANCE) {
-                WorkerAttendanceScreen(
-                    onBackClick = { navController.popBackStack() }
-                )
-            }
-
             // SETTINGS
             composable(WorkerRoutes.SETTINGS) {
                 WorkerSettingsScreen(
-                    onBackClick = { navController.popBackStack() },
+                    onBackClick = {
+                        if (!navController.popBackStack()) {
+                            navigateToTab(WorkerTab.Home.route)
+                        }
+                    },
                     onProfileClick = { navController.navigate(WorkerRoutes.PROFILE) },
-                    onNotificationsClick = { navController.navigate(WorkerRoutes.NOTIFICATIONS) }
+                    onNotificationsClick = { navController.navigate(WorkerRoutes.NOTIFICATIONS) },
+                    onLogoutClick = onLogout
                 )
             }
 

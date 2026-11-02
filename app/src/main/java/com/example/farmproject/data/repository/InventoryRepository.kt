@@ -59,7 +59,7 @@ class InventoryRepository(
     // ---------------------------------------------------------------
 
     suspend fun getFertilizers(farmId: String): List<Fertilizer> {
-        val validFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val validFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         return try {
             client.from("fertilizers")
                 .select {
@@ -76,7 +76,7 @@ class InventoryRepository(
     }
 
     suspend fun getHerbicides(farmId: String): List<Herbicide> {
-        val validFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val validFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         return try {
             client.from("herbicide")
                 .select {
@@ -93,7 +93,7 @@ class InventoryRepository(
     }
 
     suspend fun getPesticides(farmId: String): List<Pesticide> {
-        val validFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val validFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         return try {
             client.from("pesticide")
                 .select {
@@ -110,7 +110,7 @@ class InventoryRepository(
     }
 
     suspend fun getFungicides(farmId: String): List<Fungicide> {
-        val validFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val validFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         return try {
             client.from("fungicide")
                 .select {
@@ -127,7 +127,7 @@ class InventoryRepository(
     }
 
     suspend fun getInsecticides(farmId: String): List<Insecticide> {
-        val validFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val validFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         return try {
             client.from("insecticide")
                 .select {
@@ -144,7 +144,7 @@ class InventoryRepository(
     }
 
     suspend fun getWater(farmId: String): List<Water> {
-        val validFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val validFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         return try {
             client.from("water")
                 .select {
@@ -165,7 +165,7 @@ class InventoryRepository(
     // ---------------------------------------------------------------
 
     suspend fun insertFertilizer(item: Fertilizer): Fertilizer {
-        val farmId = if (item.farmId.isNotBlank()) item.farmId else CurrentSession.ensureFarmId(client)
+        val farmId = item.farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         val clean = item.copy(
             fertilizerId = item.fertilizerId ?: UUID.randomUUID().toString(),
             farmId = farmId
@@ -179,7 +179,7 @@ class InventoryRepository(
     }
 
     suspend fun insertHerbicide(item: Herbicide): Herbicide {
-        val farmId = if (item.farmId.isNotBlank()) item.farmId else CurrentSession.ensureFarmId(client)
+        val farmId = item.farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         val clean = item.copy(
             herbicideId = item.herbicideId ?: UUID.randomUUID().toString(),
             farmId = farmId
@@ -193,7 +193,7 @@ class InventoryRepository(
     }
 
     suspend fun insertPesticide(item: Pesticide): Pesticide {
-        val farmId = if (item.farmId.isNotBlank()) item.farmId else CurrentSession.ensureFarmId(client)
+        val farmId = item.farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         val clean = item.copy(
             pesticideId = item.pesticideId ?: UUID.randomUUID().toString(),
             farmId = farmId
@@ -207,7 +207,7 @@ class InventoryRepository(
     }
 
     suspend fun insertFungicide(item: Fungicide): Fungicide {
-        val farmId = if (item.farmId.isNotBlank()) item.farmId else CurrentSession.ensureFarmId(client)
+        val farmId = item.farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         val clean = item.copy(
             fungicideId = item.fungicideId ?: UUID.randomUUID().toString(),
             farmId = farmId
@@ -221,7 +221,7 @@ class InventoryRepository(
     }
 
     suspend fun insertInsecticide(item: Insecticide): Insecticide {
-        val farmId = if (item.farmId.isNotBlank()) item.farmId else CurrentSession.ensureFarmId(client)
+        val farmId = item.farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         val clean = item.copy(
             insecticideId = item.insecticideId ?: UUID.randomUUID().toString(),
             farmId = farmId
@@ -235,7 +235,7 @@ class InventoryRepository(
     }
 
     suspend fun insertWater(item: Water): Water {
-        val farmId = if (item.farmId.isNotBlank()) item.farmId else CurrentSession.ensureFarmId(client)
+        val farmId = item.farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         val clean = item.copy(
             waterId = item.waterId ?: UUID.randomUUID().toString(),
             farmId = farmId
@@ -271,7 +271,7 @@ class InventoryRepository(
     }
 
     // ---------------------------------------------------------------
-    // Stock Issuances
+    // Stock Issuance
     // ---------------------------------------------------------------
 
     suspend fun issueStockItem(
@@ -374,7 +374,7 @@ class InventoryRepository(
         }
     }
 
-    private suspend fun fetchIssuancesFromTable(
+    private suspend fun fetchIssuanceFromTable(
         tableName: String,
         category: InventoryCategory,
         farmId: String,
@@ -475,19 +475,19 @@ class InventoryRepository(
         }
     }
 
-    suspend fun getStockIssuancesForFarm(
+    suspend fun getStockIssuanceForFarm(
         farmId: String,
         divisions: List<Division> = emptyList(),
         items: List<InventoryItem> = emptyList()
     ): List<StockIssuance> = coroutineScope {
-        val validFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val validFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
 
-        val fertList = async { fetchIssuancesFromTable("fertilizer_issuance", InventoryCategory.FERTILIZER, validFarmId, divisions, items) }
-        val herbList = async { fetchIssuancesFromTable("herbicide_issuance", InventoryCategory.HERBICIDE, validFarmId, divisions, items) }
-        val pestList = async { fetchIssuancesFromTable("pesticide_issuance", InventoryCategory.PESTICIDE, validFarmId, divisions, items) }
-        val fungList = async { fetchIssuancesFromTable("fungicide_issuance", InventoryCategory.FUNGICIDE, validFarmId, divisions, items) }
-        val insecList = async { fetchIssuancesFromTable("insecticide_issuance", InventoryCategory.INSECTICIDE, validFarmId, divisions, items) }
-        val waterList = async { fetchIssuancesFromTable("water_issuance", InventoryCategory.WATER, validFarmId, divisions, items) }
+        val fertList = async { fetchIssuanceFromTable("fertilizer_issuance", InventoryCategory.FERTILIZER, validFarmId, divisions, items) }
+        val herbList = async { fetchIssuanceFromTable("herbicide_issuance", InventoryCategory.HERBICIDE, validFarmId, divisions, items) }
+        val pestList = async { fetchIssuanceFromTable("pesticide_issuance", InventoryCategory.PESTICIDE, validFarmId, divisions, items) }
+        val fungList = async { fetchIssuanceFromTable("fungicide_issuance", InventoryCategory.FUNGICIDE, validFarmId, divisions, items) }
+        val insecList = async { fetchIssuanceFromTable("insecticide_issuance", InventoryCategory.INSECTICIDE, validFarmId, divisions, items) }
+        val waterList = async { fetchIssuanceFromTable("water_issuance", InventoryCategory.WATER, validFarmId, divisions, items) }
 
         val combined = fertList.await() + herbList.await() + pestList.await() +
                 fungList.await() + insecList.await() + waterList.await()

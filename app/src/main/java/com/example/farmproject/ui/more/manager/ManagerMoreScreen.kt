@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Agriculture
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Inventory
@@ -60,9 +61,8 @@ fun ManagerMoreScreen(
     onAttendanceClick: () -> Unit = {},
     onYieldsClick: () -> Unit = {},
     onReportsClick: () -> Unit = {},
-    onFarmActivitiesClick: () -> Unit = {},
-    onEmployeesClick: () -> Unit = {},
     onCropRecommendationsClick: () -> Unit = {},
+    onExpensesClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {}
 ) {
@@ -72,6 +72,11 @@ fun ManagerMoreScreen(
             title = "Messages & Team Chat",
             description = "Chat with farm staff, supervisors and workers",
             icon = Icons.Default.Forum
+        ),
+        MoreMenuItem(
+            title = "Farm Expenses",
+            description = "Track, record & manage operational costs",
+            icon = Icons.Default.AttachMoney
         ),
         MoreMenuItem(
             title = "Worker Attendance",
@@ -89,7 +94,7 @@ fun ManagerMoreScreen(
             icon = Icons.Default.PrecisionManufacturing
         ),
         MoreMenuItem(
-            title = "Storage Produce",
+            title = "Storage & Produce",
             description = "Manage harvested produce & storage locations",
             icon = Icons.Default.Warehouse
         ),
@@ -117,10 +122,11 @@ fun ManagerMoreScreen(
 
     val menuActions: Map<String, () -> Unit> = mapOf(
         "Messages & Team Chat" to onChatClick,
+        "Farm Expenses" to onExpensesClick,
         "Worker Attendance" to onAttendanceClick,
         "Resources" to onInventoryClick,
         "Machinery" to onMachineryClick,
-        "Storage Produce" to onStorageClick,
+        "Storage & Produce" to onStorageClick,
         "Crop Yields" to onYieldsClick,
         "Reports & Summaries" to onReportsClick,
         "Get Tips" to onCropRecommendationsClick,

@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -185,7 +184,7 @@ fun ManagerCropsScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "Registered Crops",
+                                        text = "Farm Crops Catalog",
                                         fontSize = 22.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF1A1D1A)
@@ -310,7 +309,7 @@ private fun CropSummaryCard(
                         )
 
                         Text(
-                            text = "Registered crops",
+                            text = "Registered Farm Crops",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color.White.copy(alpha = 0.9f)

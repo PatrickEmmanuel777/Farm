@@ -1,6 +1,7 @@
 package com.example.farmproject.ui.machinery.manager
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -210,7 +211,12 @@ fun ManagerMachineryInUseScreen(
                                 val machineName = names[usage.machineryId] ?: "Farm Machinery"
                                 UsageLogCard(
                                     usage = usage,
-                                    machineName = machineName
+                                    machineName = machineName,
+                                    onClick = {
+                                        if (usage.machineryId.isNotBlank()) {
+                                            onMachineryClick(usage.machineryId)
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -228,10 +234,13 @@ fun ManagerMachineryInUseScreen(
 @Composable
 private fun UsageLogCard(
     usage: MachineryUsage,
-    machineName: String
+    machineName: String,
+    onClick: () -> Unit = {}
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant

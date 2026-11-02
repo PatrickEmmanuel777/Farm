@@ -20,26 +20,32 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Agriculture
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Inventory
-import androidx.compose.material.icons.filled.PrecisionManufacturing
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,11 +54,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.farmproject.data.model.CropYieldSummary
+import com.example.farmproject.data.model.ExpenseSummary
 import com.example.farmproject.data.model.InventorySummary
-import com.example.farmproject.data.model.MachinerySummary
 import com.example.farmproject.data.model.ReportSummary
 import com.example.farmproject.data.model.StorageSummary
-import com.example.farmproject.data.model.WorkforceSummary
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -71,6 +76,9 @@ fun ManagerReportDetailsScreen(
     onDownloadClick: () -> Unit = {},
     onRegenerateClick: () -> Unit = {},
 ) {
+    var showDownloadDialog by remember { mutableStateOf(false) }
+    var selectedFormat by remember { mutableStateOf("PDF") }
+
     val categoryName = detail?.category?.name ?: titleFallback
     val categoryCode = detail?.category?.code ?: categoryCodeFromTitle(titleFallback)
     val startStr = formatIsoDate(detail?.record?.periodStart)
@@ -227,8 +235,8 @@ fun ManagerReportDetailsScreen(
 
                         DetailRow(
                             icon = Icons.Default.Description,
-                            label = "Format",
-                            value = "PDF",
+                            label = "Available Formats",
+                            value = "PDF, Excel",
                         )
 
                         DetailRow(
@@ -384,7 +392,7 @@ fun ManagerReportDetailsScreen(
                     }
 
                     Button(
-                        onClick = onDownloadClick,
+                        onClick = { showDownloadDialog = true },
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp),
@@ -410,6 +418,53 @@ fun ManagerReportDetailsScreen(
             }
         }
     }
+
+    if (showDownloadDialog) {
+        AlertDialog(
+            onDismissRequest = { showDownloadDialog = false },
+            title = { Text("Download Report", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Select report download format:")
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedFormat == "PDF",
+                            onClick = { selectedFormat = "PDF" },
+                            label = { Text("PDF (.pdf)") },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        FilterChip(
+                            selected = selectedFormat == "Excel",
+                            onClick = { selectedFormat = "Excel" },
+                            label = { Text("Excel (.xlsx)") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDownloadDialog = false
+                        onDownloadClick()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0))
+                ) {
+                    Text("Download $selectedFormat")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDownloadDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 private fun formatIsoDate(iso: String?): String {
@@ -424,17 +479,15 @@ private fun formatIsoDate(iso: String?): String {
 }
 
 private fun categoryCodeFromTitle(title: String): String = when {
-    title.contains("Inventory", ignoreCase = true) -> "inventory"
-    title.contains("Machinery", ignoreCase = true) -> "machinery"
-    title.contains("Workforce", ignoreCase = true) -> "workforce"
+    title.contains("Inventory", ignoreCase = true) || title.contains("Resource", ignoreCase = true) -> "inventory"
+    title.contains("Expense", ignoreCase = true) -> "expenses"
     title.contains("Storage", ignoreCase = true) -> "storage"
     else -> "crop_yield"
 }
 
 private fun iconForCategoryCode(code: String): ImageVector = when (code.lowercase()) {
     "inventory" -> Icons.Default.Inventory
-    "machinery" -> Icons.Default.PrecisionManufacturing
-    "workforce" -> Icons.Default.Groups
+    "expenses" -> Icons.Default.AttachMoney
     "storage" -> Icons.Default.Assessment
     else -> Icons.Default.Agriculture
 }
@@ -445,16 +498,27 @@ private fun extractMetricsAndBreakdown(
 ): Triple<List<Pair<String, String>>, String, List<Pair<String, String>>> {
     return when (summary) {
         is CropYieldSummary -> {
+            val totalKg = summary.cards?.totalHarvestKg ?: summary.harvestTotals.sumOf { it.quantity }
+            val avgYield = summary.cards?.avgYieldPerAcre ?: 0.0
+            val harvestCount = if (summary.harvestCount > 0) summary.harvestCount else summary.harvestTotals.sumOf { it.harvests }
+            val totalAcres = if (summary.totalAreaAcres > 0) summary.totalAreaAcres else (if (summary.totalPlantings > 0) summary.totalPlantings.toDouble() else 12.5)
+
             val keyMetrics = listOf(
-                "Total Plantings" to summary.totalPlantings.toString(),
-                "Harvested Quantity" to "${"%.1f".format(summary.harvestTotals.sumOf { it.quantity })} ${summary.harvestTotals.firstOrNull()?.unit ?: "kg"}",
-                "Crops Logged" to "${summary.byCrop.size}",
-                "Divisions Covered" to "${summary.byDivision.size}",
+                "Total Harvest" to "${"%,.1f".format(totalKg)} kg",
+                "Avg Yield / Acre" to "${"%,.1f".format(avgYield)} kg/acre",
+                "Harvest Count" to "$harvestCount",
+                "Total Area" to "${"%,.1f".format(totalAcres)} acres",
             )
-            val rows = summary.byCrop.map { crop ->
-                (crop.cropName ?: "Crop") to "${crop.plantings} plantings | ${"%.1f".format(crop.harvested)} ${crop.unit ?: "kg"} harvested"
+            val rows = if (summary.productivity.isNotEmpty()) {
+                summary.productivity.map { p ->
+                    p.crop to "${p.harvests} harvests | ${"%,.1f".format(p.actualYieldKg)} kg (${"%,.1f".format(p.yieldPerAcre)} kg/acre)"
+                }
+            } else {
+                summary.byCrop.map { crop ->
+                    (crop.cropName ?: "Crop") to "${crop.plantings} plantings | ${"%,.1f".format(crop.harvested)} ${crop.unit ?: "kg"} harvested"
+                }
             }
-            Triple(keyMetrics, "Crop Yield Breakdown", rows)
+            Triple(keyMetrics, "Crop Yield & Productivity", rows)
         }
 
         is InventorySummary -> {
@@ -470,30 +534,19 @@ private fun extractMetricsAndBreakdown(
             Triple(keyMetrics, "Resources by Category", rows)
         }
 
-        is MachinerySummary -> {
+        is ExpenseSummary -> {
             val keyMetrics = listOf(
-                "Machines Used" to "${summary.machinesUsed}",
-                "Usage Sessions" to "${summary.usageSessions}",
-                "Total Operating Hours" to "${"%.1f".format(summary.totalHoursUsed)} hrs",
-                "Maintenance Cost" to "KES ${"%.0f".format(summary.maintenance.totalCost)}",
+                "Total Expenditure" to "KES ${"%,.2f".format(summary.totalExpenses)}",
+                "Expense Records" to "${summary.expenseCount}",
+                "Average Expense" to "KES ${"%,.2f".format(summary.averageExpense)}",
+                "Largest Single Expense" to "KES ${"%,.2f".format(summary.largestExpense)}",
             )
-            val rows = summary.byMachine.map { m ->
-                m.machineryId to "${m.sessions} sessions | ${m.hoursUsed} hrs | Condition: ${m.latestCondition ?: "Good"}"
-            }
-            Triple(keyMetrics, "Equipment Usage Records", rows)
-        }
-
-        is WorkforceSummary -> {
-            val keyMetrics = listOf(
-                "Total Workers" to "${summary.totalWorkers}",
-                "Activities Assigned" to "${summary.activitiesAssigned}",
-                "Activities Completed" to "${summary.activitiesCompleted}",
-                "Completion Rate" to (summary.overallCompletionRatePct?.let { "%.1f%%".format(it) } ?: "N/A"),
-            )
-            val rows = summary.employees.map { emp ->
-                emp.displayName to "${emp.daysPresent} days present | ${emp.activitiesCompleted}/${emp.activitiesAssigned} tasks | ${emp.hoursWorked} hrs"
-            }
-            Triple(keyMetrics, "Employee Attendance & Tasks", rows)
+            val rows = (summary.byCategory.map { cat ->
+                cat.name to "${cat.count} expenses (${cat.percentage}%) | KES ${"%,.2f".format(cat.total)}"
+            } + summary.topExpenses.map { exp ->
+                exp.description to "${exp.category ?: "Expense"} | KES ${"%,.2f".format(exp.amount)}"
+            }).take(10)
+            Triple(keyMetrics, "Operational Cost Breakdown", rows)
         }
 
         is StorageSummary -> {
@@ -501,7 +554,7 @@ private fun extractMetricsAndBreakdown(
                 "Storage Facilities" to "${summary.facilities.size}",
                 "Total Stored Produce" to "${"%.0f".format(summary.produceByCrop.sumOf { it.storedKg })} kg",
                 "Near Expiry Lots" to "${summary.nearExpiryLots.size}",
-                "Average Utilisation" to "${summary.facilities.map { it.utilisationPct }.average().takeIf { !it.isNaN() }?.let { "%.1f%%".format(it) } ?: "0%"}",
+                "Average Utilisation" to (summary.facilities.map { it.utilisationPct }.average().takeIf { !it.isNaN() }?.let { "%.1f%%".format(it) } ?: "0%"),
             )
             val rows = summary.facilities.map { f ->
                 f.name to "${"%.0f".format(f.storedKg)} / ${"%.0f".format(f.capacityKg)} kg stored (${"%.1f".format(f.utilisationPct)}%)"
@@ -512,10 +565,9 @@ private fun extractMetricsAndBreakdown(
         else -> {
             val fallbackMetrics = when (code) {
                 "inventory" -> listOf("Total Stock Items" to "128", "Low Stock Alerts" to "3", "Out of Stock Count" to "1", "Expiring Soon Count" to "2")
-                "machinery" -> listOf("Machines Used" to "8", "Usage Sessions" to "42", "Total Operating Hours" to "340.5 hrs", "Maintenance Cost" to "KES 85,000")
-                "workforce" -> listOf("Total Workers" to "24", "Activities Assigned" to "65", "Activities Completed" to "61", "Completion Rate" to "93.8%")
+                "expenses" -> listOf("Total Expenditure" to "KES 158,500.00", "Expense Records" to "14", "Average Expense" to "KES 11,321.43", "Largest Single Expense" to "KES 35,000.00")
                 "storage" -> listOf("Storage Facilities" to "3", "Total Stored Produce" to "43,700 kg", "Near Expiry Lots" to "1", "Average Utilisation" to "62.0%")
-                else -> listOf("Total Plantings" to "8", "Harvested Quantity" to "12,500 kg", "Crops Logged" to "2", "Divisions Covered" to "2")
+                else -> listOf("Total Harvest" to "12,500.0 kg", "Avg Yield / Acre" to "1,000.0 kg/acre", "Harvest Count" to "12", "Total Area" to "12.5 acres")
             }
             Triple(fallbackMetrics, "Summary Breakdown", emptyList())
         }

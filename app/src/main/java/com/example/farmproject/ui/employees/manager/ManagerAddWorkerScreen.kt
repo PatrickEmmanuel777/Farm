@@ -149,10 +149,10 @@ fun ManagerAddWorkerScreen(
     }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Color(0xFF1565C0),
+        focusedBorderColor = Color(0xFF1B5E20),
         unfocusedBorderColor = Color(0xFFBDBDBD),
-        focusedLabelColor = Color(0xFF1565C0),
-        cursorColor = Color(0xFF1565C0)
+        focusedLabelColor = Color(0xFF1B5E20),
+        cursorColor = Color(0xFF1B5E20)
     )
 
     Scaffold(
@@ -161,7 +161,7 @@ fun ManagerAddWorkerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1565C0))
+                    .background(Color(0xFF1B5E20))
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -395,7 +395,7 @@ fun ManagerAddWorkerScreen(
                     .height(54.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1565C0)
+                    containerColor = Color(0xFF1B5E20)
                 )
             ) {
                 if (isSaving) {
@@ -441,7 +441,7 @@ private fun SectionTitle(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF1565C0),
+            tint = Color(0xFF1B5E20),
             modifier = Modifier.size(22.dp)
         )
 

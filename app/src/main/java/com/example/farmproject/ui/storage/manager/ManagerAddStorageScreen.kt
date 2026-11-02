@@ -19,10 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Straighten
@@ -32,6 +32,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
@@ -90,10 +91,10 @@ fun ManagerAddStorageScreen(
     val conditions = listOf("Good", "Fair", "Spoiled")
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Color(0xFF1565C0),
+        focusedBorderColor = Color(0xFF1B5E20),
         unfocusedBorderColor = Color(0xFFBDBDBD),
-        focusedLabelColor = Color(0xFF1565C0),
-        cursorColor = Color(0xFF1565C0)
+        focusedLabelColor = Color(0xFF1B5E20),
+        cursorColor = Color(0xFF1B5E20)
     )
 
     Scaffold(
@@ -102,7 +103,7 @@ fun ManagerAddStorageScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1565C0))
+                    .background(Color(0xFF1B5E20))
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -215,7 +216,7 @@ fun ManagerAddStorageScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Unit") },
                     leadingIcon = {
                         Icon(
@@ -255,7 +256,7 @@ fun ManagerAddStorageScreen(
                     onValueChange = { location = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                     label = { Text("Storage Location") },
                     placeholder = { Text("Select or type location") },
                     leadingIcon = {
@@ -312,7 +313,7 @@ fun ManagerAddStorageScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Current Condition") },
                     leadingIcon = {
                         Icon(
@@ -345,7 +346,7 @@ fun ManagerAddStorageScreen(
 
             // NOTES
             SectionTitle(
-                icon = Icons.Default.Notes,
+                icon = Icons.AutoMirrored.Filled.Notes,
                 title = "Additional Information"
             )
 
@@ -359,7 +360,7 @@ fun ManagerAddStorageScreen(
                 placeholder = { Text("Enter any additional information...") },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Default.Notes,
+                        imageVector = Icons.AutoMirrored.Filled.Notes,
                         contentDescription = null
                     )
                 },
@@ -423,7 +424,7 @@ fun ManagerAddStorageScreen(
                     .height(54.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1565C0)
+                    containerColor = Color(0xFF1B5E20)
                 )
             ) {
                 if (isSaving) {
@@ -465,7 +466,7 @@ private fun SectionTitle(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF1565C0),
+            tint = Color(0xFF1B5E20),
             modifier = Modifier.size(22.dp)
         )
 

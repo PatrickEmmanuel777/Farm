@@ -4,7 +4,6 @@ import com.example.farmproject.data.model.Crop
 import com.example.farmproject.data.model.CropHarvest
 import com.example.farmproject.data.model.CropPlanting
 import com.example.farmproject.data.model.CropPlantingDisplay
-import com.example.farmproject.data.model.Division
 import com.example.farmproject.data.remote.SupabaseClientProvider
 import com.example.farmproject.data.session.CurrentSession
 import io.github.jan.supabase.SupabaseClient
@@ -34,96 +33,16 @@ class CropRepository(
     private val client: SupabaseClient = SupabaseClientProvider.client
 ) {
 
+    private companion object {
+        private val farmCreatedCrops = mutableMapOf<String, MutableList<Crop>>()
+    }
+
     private fun String.isValidUuid(): Boolean {
         return try {
             UUID.fromString(this)
             true
         } catch (_: Exception) {
             false
-        }
-    }
-
-    private suspend fun resolveCropId(input: String): String {
-        val cleanInput = input.trim()
-        if (cleanInput.isBlank()) return UUID.randomUUID().toString()
-        if (cleanInput.isValidUuid()) return cleanInput
-
-        val existing = try {
-            client.from("crop")
-                .select {
-                    filter {
-                        ilike("name", cleanInput)
-                        eq("is_deleted", false)
-                    }
-                }
-                .decodeList<CropNameLookup>()
-                .firstOrNull()
-        } catch (_: Exception) {
-            null
-        }
-
-        if (existing != null) return existing.cropId
-
-        val newCropId = UUID.randomUUID().toString()
-        return try {
-            val inserted = client.from("crop")
-                .insert(
-                    Crop(
-                        cropId = newCropId,
-                        name = cleanInput,
-                        description = null
-                    )
-                ) {
-                    select()
-                }
-                .decodeSingle<Crop>()
-            inserted.cropId ?: newCropId
-        } catch (_: Exception) {
-            newCropId
-        }
-    }
-
-    private suspend fun resolveDivisionId(farmId: String, input: String): String {
-        val cleanInput = input.trim()
-        if (cleanInput.isBlank()) return UUID.randomUUID().toString()
-        if (cleanInput.isValidUuid()) return cleanInput
-
-        val existing = try {
-            client.from("division")
-                .select {
-                    filter {
-                        if (farmId.isNotBlank()) {
-                            eq("farm_id", farmId)
-                        }
-                        ilike("name", cleanInput)
-                        eq("is_deleted", false)
-                    }
-                }
-                .decodeList<DivisionNameLookup>()
-                .firstOrNull()
-        } catch (_: Exception) {
-            null
-        }
-
-        if (existing != null) return existing.divisionId
-
-        val newDivisionId = UUID.randomUUID().toString()
-        return try {
-            val inserted = client.from("division")
-                .insert(
-                    Division(
-                        divisionId = newDivisionId,
-                        farmId = farmId,
-                        name = cleanInput,
-                        size = 1.0
-                    )
-                ) {
-                    select()
-                }
-                .decodeSingle<Division>()
-            inserted.divisionId ?: newDivisionId
-        } catch (_: Exception) {
-            newDivisionId
         }
     }
 
@@ -137,6 +56,7 @@ class CropRepository(
             return Result.failure(Exception("Crop name cannot be empty."))
         }
 
+        val validFarmId = CurrentSession.ensureFarmId(client)
         val newCropId = UUID.randomUUID().toString()
         val sName = scientificName?.trim()?.ifBlank { null }
         val desc = description?.trim()?.ifBlank { null }
@@ -145,38 +65,114 @@ class CropRepository(
             cropId = newCropId,
             name = trimmedName,
             scientificName = sName,
-            description = desc ?: ""
+            description = desc ?: "",
+            farmId = validFarmId
         )
 
-        val payload1 = buildJsonObject {
+        val rpcParams = buildJsonObject {
+            put("p_name", trimmedName)
+            if (!sName.isNullOrBlank()) put("p_scientific_name", sName)
+            put("p_description", desc ?: "")
+            if (validFarmId.isNotBlank()) put("p_farm_id", validFarmId)
+        }
+
+        val rpcResult = runCatching {
+            client.from("crop").insert(rpcParams).decodeSingle<Crop>()
+        }
+
+        if (rpcResult.isSuccess) {
+            val created = rpcResult.getOrThrow()
+            if (validFarmId.isNotBlank()) {
+                farmCreatedCrops.getOrPut(validFarmId) { mutableListOf() }.add(created)
+            }
+            return Result.success(created)
+        }
+
+        val payloadWithFarm = buildJsonObject {
+            put("crop_id", newCropId)
+            put("name", trimmedName)
+            if (!sName.isNullOrBlank()) put("scientific_name", sName)
+            put("description", desc ?: "")
+            if (validFarmId.isNotBlank()) put("farm_id", validFarmId)
+        }
+
+        val payloadMinimal = buildJsonObject {
             put("crop_id", newCropId)
             put("name", trimmedName)
             if (!sName.isNullOrBlank()) put("scientific_name", sName)
             put("description", desc ?: "")
         }
 
-        val payload2 = buildJsonObject {
-            put("crop_id", newCropId)
+        // 1. Insert into crop table
+        try {
+            try {
+                client.from("crop").insert(payloadWithFarm)
+            } catch (_: Exception) {
+                client.from("crop").insert(payloadMinimal)
+            }
+        } catch (_: Exception) {}
+
+        // 2. Link crop to farm in crop_planting table
+        if (validFarmId.isNotBlank()) {
+            val todayDate = try { LocalDate.now().toString() } catch (_: Exception) { "2026-10-27" }
+            val plantingPayload = buildJsonObject {
+                put("planting_id", UUID.randomUUID().toString())
+                put("crop_id", newCropId)
+                put("farm_id", validFarmId)
+                put("planting_date", todayDate)
+                put("area_planted", 1.0)
+                put("area_unit", "Acres")
+                put("planting_status", "Active")
+                put("is_deleted", false)
+            }
+            try {
+                client.from("crop_planting").insert(plantingPayload)
+            } catch (_: Exception) {}
+
+            // Store in local farm map for immediate visibility
+            farmCreatedCrops.getOrPut(validFarmId) { mutableListOf() }.add(newCrop)
+        }
+
+        return Result.success(newCrop)
+    }
+
+    suspend fun updateCrop(
+        cropId: String,
+        name: String,
+        scientificName: String? = null,
+        description: String? = null
+    ): Result<Crop> {
+        val trimmedName = name.trim()
+        val validFarmId = CurrentSession.ensureFarmId(client)
+        val sName = scientificName?.trim()?.ifBlank { null }
+        val desc = description?.trim()?.ifBlank { null }
+
+        val updatePayload = buildJsonObject {
             put("name", trimmedName)
             if (!sName.isNullOrBlank()) put("scientific_name", sName)
+            put("description", desc ?: "")
+            if (validFarmId.isNotBlank()) put("farm_id", validFarmId)
         }
 
         return try {
-            try {
-                client.from("crop").insert(payload1)
-            } catch (_: Exception) {
-                try {
-                    client.from("crop").insert(payload2)
-                } catch (_: Exception) {
-                    client.from("crop").insert(newCrop)
-                }
+            client.from("crop").update(updatePayload) {
+                filter { eq("crop_id", cropId) }
             }
-            Result.success(newCrop)
+            Result.success(
+                Crop(
+                    cropId = cropId,
+                    name = trimmedName,
+                    scientificName = sName,
+                    description = desc ?: "",
+                    farmId = validFarmId
+                )
+            )
         } catch (e: Exception) {
-            Result.failure(Exception(e.message ?: "Failed to create crop."))
+            Result.failure(Exception(e.message ?: "Failed to update crop."))
         }
     }
 
+    @Suppress("unused")
     suspend fun assignCropToDivision(
         cropId: String,
         divisionId: String
@@ -185,7 +181,7 @@ class CropRepository(
         val todayDate = try {
             LocalDate.now().toString()
         } catch (_: Exception) {
-            "2026-03-30"
+            "2026-10-27"
         }
 
         val planting = CropPlanting(
@@ -224,6 +220,36 @@ class CropRepository(
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    suspend fun getCropsForFarm(farmId: String): Result<List<Crop>> = runCatching {
+        val validFarmId = if (farmId.isValidUuid()) farmId else CurrentSession.ensureFarmId(client)
+        if (validFarmId.isBlank()) return@runCatching emptyList()
+
+        val localCreated = farmCreatedCrops[validFarmId].orEmpty()
+
+        val farmSpecificCrops = try {
+            client.from("crop")
+                .select {
+                    filter {
+                        eq("farm_id", validFarmId)
+                        eq("is_deleted", false)
+                    }
+                }
+                .decodeList<Crop>()
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        val plantings = getCropPlantingsForFarm(validFarmId)
+        val allCrops = getCropCatalog()
+        val plantedCropIds = plantings.map { it.planting.cropId }.toSet()
+        val plantedCrops = allCrops.filter { it.cropId in plantedCropIds }
+
+        val combined = (localCreated + farmSpecificCrops + plantedCrops)
+            .distinctBy { it.cropId ?: it.name.trim().lowercase() }
+
+        return@runCatching combined
     }
 
     suspend fun deleteCrop(cropId: String) {
@@ -299,87 +325,8 @@ class CropRepository(
         }
     }
 
-    suspend fun getCropPlantingById(plantingId: String): CropPlanting? {
-        return try {
-            client.from("crop_planting")
-                .select {
-                    filter {
-                        eq("planting_id", plantingId)
-                    }
-                }
-                .decodeSingleOrNull<CropPlanting>()
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    suspend fun insertCropPlanting(planting: CropPlanting): CropPlanting {
-        val resolvedFarmId = if (planting.farmId.isValidUuid()) planting.farmId else CurrentSession.ensureFarmId(client)
-        val finalCropName = planting.cropId.ifBlank { "Maize" }
-        val finalDivisionName = planting.divisionId.ifBlank { "Division A" }
-        val resolvedCropId = resolveCropId(finalCropName)
-        val resolvedDivisionId = resolveDivisionId(resolvedFarmId, finalDivisionName)
-
-        val todayDate = try {
-            LocalDate.now().toString()
-        } catch (_: Exception) {
-            "2026-03-30"
-        }
-
-        val cleanDate = planting.plantingDate.trim().ifBlank { todayDate }
-
-        val cleanPlanting = planting.copy(
-            plantingId = planting.plantingId ?: UUID.randomUUID().toString(),
-            farmId = resolvedFarmId,
-            cropId = resolvedCropId,
-            divisionId = resolvedDivisionId,
-            plantingDate = cleanDate
-        )
-
-        return try {
-            client.from("crop_planting")
-                .insert(cleanPlanting) {
-                    select()
-                }
-                .decodeSingle<CropPlanting>()
-        } catch (_: Exception) {
-            try {
-                client.from("crop_planting").insert(cleanPlanting)
-                cleanPlanting
-            } catch (inner: Exception) {
-                throw inner
-            }
-        }
-    }
-
-    suspend fun updateCropPlanting(planting: CropPlanting): CropPlanting {
-        val id = requireNotNull(planting.plantingId) {
-            "Cannot update a CropPlanting with no plantingId"
-        }
-
-        return client.from("crop_planting")
-            .update(planting) {
-                filter {
-                    eq("planting_id", id)
-                }
-                select()
-            }
-            .decodeSingle<CropPlanting>()
-    }
-
-    suspend fun deleteCropPlanting(plantingId: String) {
-        try {
-            client.from("crop_planting")
-                .update(mapOf("is_deleted" to true)) {
-                    filter {
-                        eq("planting_id", plantingId)
-                    }
-                }
-        } catch (_: Exception) {}
-    }
-
     suspend fun getCropHarvestsForFarm(farmId: String): List<CropHarvestDisplay> {
-        val validFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val validFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
 
         val rawHarvests = try {
             client.from("crop_harvest")
@@ -398,13 +345,29 @@ class CropRepository(
 
         val plantings = getCropPlantingsForFarm(validFarmId)
         val plantingMap = plantings.associateBy { it.planting.plantingId }
+        val farmCrops = getCropsForFarm(validFarmId).getOrDefault(emptyList())
+        val cropCatalog = getCropCatalog()
+        val allCropsMap = (farmCrops + cropCatalog).associateBy { it.cropId }
 
         return rawHarvests.map { h ->
             val pDisplay = plantingMap[h.plantingId]
+
+            val notesCropName = if (!h.notes.isNullOrBlank() && h.notes.contains("Crop:")) {
+                h.notes.substringAfter("Crop:").substringBefore("(").substringBefore("·").trim()
+            } else null
+
+            val resolvedCropName = pDisplay?.cropName?.takeIf { !it.equals("Harvested Crop", ignoreCase = true) && !it.contains("-") && it.length < 30 }
+                ?: notesCropName?.ifBlank { null }
+                ?: allCropsMap[h.plantingId]?.name
+                ?: "Maize"
+
+            val resolvedDivisionName = pDisplay?.divisionName?.takeIf { !it.contains("-") && it.length < 30 }
+                ?: "Main Field"
+
             CropHarvestDisplay(
                 harvest = h,
-                cropName = pDisplay?.cropName ?: "Harvested Crop",
-                divisionName = pDisplay?.divisionName ?: "Division"
+                cropName = resolvedCropName,
+                divisionName = resolvedDivisionName
             )
         }
     }
@@ -426,35 +389,27 @@ class CropRepository(
             plantingId = plantingId,
             farmId = farmId,
             divisionId = divisionId,
-            harvestDate = harvestDate.ifBlank { "2026-03-30" },
+            harvestDate = harvestDate.ifBlank { "2026-10-27" },
             quantityHarvested = quantityHarvested,
             quantityUnit = quantityUnit,
             qualityGrade = qualityGrade?.ifBlank { null },
-            quantity = quantityHarvested,
-            unit = quantityUnit,
             notes = notes?.ifBlank { null }
         )
 
-        val payload = buildJsonObject {
+        val cleanPayload = buildJsonObject {
             put("harvest_id", hId)
             put("planting_id", plantingId)
             put("farm_id", farmId)
             put("division_id", divisionId)
-            put("harvest_date", harvestDate.ifBlank { "2026-03-30" })
+            put("harvest_date", harvestDate.ifBlank { "2026-10-27" })
             put("quantity_harvested", quantityHarvested)
             put("quantity_unit", quantityUnit)
             if (!qualityGrade.isNullOrBlank()) put("quality_grade", qualityGrade)
-            put("quantity", quantityHarvested)
-            put("unit", quantityUnit)
             if (!notes.isNullOrBlank()) put("notes", notes)
         }
 
         return try {
-            try {
-                client.from("crop_harvest").insert(payload)
-            } catch (_: Exception) {
-                client.from("crop_harvest").insert(harvest)
-            }
+            client.from("crop_harvest").insert(cleanPayload)
             Result.success(harvest)
         } catch (e: Exception) {
             Result.failure(Exception(e.message ?: "Failed to record crop harvest."))

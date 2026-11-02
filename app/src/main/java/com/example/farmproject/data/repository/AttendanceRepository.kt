@@ -3,6 +3,7 @@ package com.example.farmproject.data.repository
 import android.util.Log
 import com.example.farmproject.data.model.AttendanceDisplay
 import com.example.farmproject.data.model.AttendanceRecord
+import com.example.farmproject.data.model.FarmAttendanceRow
 import com.example.farmproject.data.remote.SupabaseClientProvider
 import com.example.farmproject.data.session.CurrentSession
 import io.github.jan.supabase.SupabaseClient
@@ -54,22 +55,68 @@ class AttendanceRepository(
     suspend fun getAttendanceForDate(farmId: String, workDate: String): List<AttendanceDisplay> {
         val targetFarmId = farmId.ifBlank { CurrentSession.farmId }
 
-        // Errors are NOT swallowed any more: wrap the call in runCatching/try in the ViewModel.
-        val recordsByProfile = client.from("attendance")
-            .select {
-                filter {
-                    if (targetFarmId.isNotBlank()) eq("farm_id", targetFarmId)
-                    eq("work_date", workDate)
-                }
-                order("created_at", Order.DESCENDING)
+        // 1. Try get_farm_attendance RPC
+        val rpcResult = runCatching {
+            val params = buildJsonObject {
+                put("p_farm_id", targetFarmId)
+                put("p_date", workDate)
             }
-            .decodeList<JsonObject>()
-            .map { it.toRecord(targetFarmId, workDate) }
-            .associateBy { it.workerProfileId }      // holds worker OR supervisor profile id
+            client.postgrest.rpc("get_farm_attendance", params)
+                .decodeList<FarmAttendanceRow>()
+        }
 
-        val workers = employeeRepository.getWorkersForFarm(targetFarmId).map { w ->
+        if (rpcResult.isSuccess) {
+            val rows = rpcResult.getOrThrow()
+            if (rows.isNotEmpty()) {
+                return rows.map { row ->
+                    val rec = if (!row.attendanceId.isNullOrBlank() || !row.status.isNullOrBlank() || row.clockIn != null) {
+                        AttendanceRecord(
+                            attendanceId = row.attendanceId,
+                            farmId = targetFarmId,
+                            workerProfileId = row.staffId,
+                            workDate = workDate,
+                            clockIn = row.clockIn,
+                            clockOut = row.clockOut,
+                            status = row.status ?: "present",
+                            notes = row.notes
+                        )
+                    } else null
+
+                    AttendanceDisplay(
+                        record = rec,
+                        workerProfileId = row.staffId,
+                        workerName = row.fullName,
+                        employeeNumber = row.employeeCode,
+                        phoneNumber = null,
+                        role = if (row.staffRole.equals("supervisor", ignoreCase = true)) "Supervisor" else "Worker"
+                    )
+                }
+            }
+        }
+
+        // 2. Direct table select fallback
+        val records = runCatching {
+            client.from("attendance")
+                .select {
+                    filter {
+                        if (targetFarmId.isNotBlank()) eq("farm_id", targetFarmId)
+                        eq("work_date", workDate)
+                    }
+                    order("created_at", Order.DESCENDING)
+                }
+                .decodeList<JsonObject>()
+                .map { it.toRecord(targetFarmId, workDate) }
+        }.getOrDefault(emptyList())
+
+        val workers = employeeRepository.getWorkersForFarm(targetFarmId)
+        val supervisors = employeeRepository.getSupervisorsForFarm(targetFarmId)
+
+        val workersDisplay = workers.map { w ->
+            val match = records.find {
+                it.workerProfileId == w.profileId || it.workerProfileId == w.accountId
+            }
             AttendanceDisplay(
-                record = recordsByProfile[w.profileId],
+                record = match,
                 workerProfileId = w.profileId,
                 workerName = w.fullName,
                 employeeNumber = w.employeeNumber,
@@ -78,9 +125,12 @@ class AttendanceRepository(
             )
         }
 
-        val supervisors = employeeRepository.getSupervisorsForFarm(targetFarmId).map { s ->
+        val supervisorsDisplay = supervisors.map { s ->
+            val match = records.find {
+                it.workerProfileId == s.profileId || it.workerProfileId == s.accountId
+            }
             AttendanceDisplay(
-                record = recordsByProfile[s.profileId],
+                record = match,
                 workerProfileId = s.profileId,
                 workerName = s.fullName,
                 employeeNumber = s.employeeNumber,
@@ -89,7 +139,7 @@ class AttendanceRepository(
             )
         }
 
-        return supervisors + workers
+        return supervisorsDisplay + workersDisplay
     }
 
     /** My own row for today (server decides "today" in Nairobi time), or null = not marked. */
@@ -148,13 +198,18 @@ class AttendanceRepository(
 
     /** Removes today's absent/leave row so the person can clock in instead. */
     suspend fun undoAway(): Result<Unit> =
-        attempt("undoAway") { client.postgrest.rpc("attendance_undo_away"); Unit }
+        attempt("undoAway") {
+            client.postgrest.rpc("attendance_undo_away")
+        }
 
     // ── Old entry points, kept so existing screens compile ─────────────────────
 
     @Deprecated("Managers no longer record attendance for others. Use clockInSelf().")
-    suspend fun clockIn(farmId: String, workerProfileId: String, workDate: String = ""): Result<AttendanceRecord> =
-        clockInSelf(farmId)
+    suspend fun clockIn(
+        @Suppress("UNUSED_PARAMETER") farmId: String,
+        @Suppress("UNUSED_PARAMETER") workerProfileId: String,
+        @Suppress("UNUSED_PARAMETER") workDate: String = ""
+    ): Result<AttendanceRecord> = clockInSelf(farmId)
 
     @Deprecated("Staff mark themselves: use markAway(). Present/late are set by clocking in.")
     suspend fun markAttendance(
@@ -207,8 +262,10 @@ class AttendanceRepository(
             farmId = str("farm_id") ?: fallbackFarmId,
             workerProfileId = str("worker_profile_id") ?: str("supervisor_profile_id") ?: "",
             workDate = str("work_date") ?: fallbackDate,
-            checkIn = str("clock_in"),
-            checkOut = str("clock_out"),
+            clockIn = str("clock_in"),
+            clockOut = str("clock_out"),
+            rawCheckIn = str("check_in"),
+            rawCheckOut = str("check_out"),
             status = str("status") ?: "present",
             notes = str("notes"),
             recordedBy = str("recorded_by"),

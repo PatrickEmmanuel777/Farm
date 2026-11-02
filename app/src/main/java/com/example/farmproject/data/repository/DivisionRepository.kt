@@ -15,7 +15,7 @@ class DivisionRepository(
 ) {
 
     suspend fun getDivisionsForFarm(farmId: String): List<Division> {
-        val targetFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val targetFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
 
         return try {
             client.from("division")

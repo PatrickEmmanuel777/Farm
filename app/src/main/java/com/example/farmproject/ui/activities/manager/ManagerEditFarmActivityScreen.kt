@@ -35,6 +35,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
@@ -81,7 +82,7 @@ private fun stripExpectedHarvestDateFromNotes(notes: String?): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManagerEditFarmActivityScreen(
-    activityId: String,
+    activityId: String = "",
     initialType: String = "",
     initialName: String = "",
     initialDueDate: String = "",
@@ -240,7 +241,7 @@ fun ManagerEditFarmActivityScreen(
                     readOnly = false,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                     label = { Text("Activity Type *") },
                     placeholder = { Text("Select or type activity type") },
                     leadingIcon = {
@@ -344,7 +345,7 @@ fun ManagerEditFarmActivityScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Select Specific $assignedRole") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = assigneeDropdownExpanded) },
                     colors = fieldColors,
@@ -455,7 +456,7 @@ fun ManagerEditFarmActivityScreen(
                                 readOnly = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(),
+                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                                 label = { Text("Division") },
                                 leadingIcon = {
                                     Icon(
@@ -505,7 +506,7 @@ fun ManagerEditFarmActivityScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Machinery Item (optional)") },
                     leadingIcon = {
                         Icon(

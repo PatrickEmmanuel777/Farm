@@ -1,5 +1,7 @@
 package com.example.farmproject.data.session
 
+import com.example.farmproject.data.model.SupervisorDuty
+import com.example.farmproject.data.model.hasDutyAccess
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.SignOutScope
 import io.github.jan.supabase.auth.auth
@@ -20,6 +22,7 @@ object CurrentSession {
     var fullName: String? = null
     var email: String? = null
     var phoneNumber: String? = null
+    var supervisorDuties: Set<SupervisorDuty> = emptySet()
 
     fun updateSession(
         userId: String?,
@@ -27,7 +30,8 @@ object CurrentSession {
         email: String?,
         phoneNumber: String?,
         userRole: String?,
-        farmId: String = ""
+        farmId: String = "",
+        supervisorDuties: Set<SupervisorDuty> = emptySet()
     ) {
         this.userId = userId
         this.fullName = fullName
@@ -35,7 +39,14 @@ object CurrentSession {
         this.phoneNumber = phoneNumber
         this.userRole = userRole
         if (farmId.isNotBlank()) this.farmId = farmId
+        if (supervisorDuties.isNotEmpty()) this.supervisorDuties = supervisorDuties
     }
+
+    fun isManager(): Boolean = userRole?.equals("Manager", ignoreCase = true) == true
+    fun isSupervisor(): Boolean = userRole?.equals("Supervisor", ignoreCase = true) == true
+    fun isWorker(): Boolean = userRole?.equals("Worker", ignoreCase = true) == true
+
+    fun hasDuty(duty: SupervisorDuty): Boolean = hasDutyAccess(isManager(), supervisorDuties, duty)
 
     suspend fun ensureFarmId(client: SupabaseClient): String {
         if (farmId.isNotBlank()) return farmId
@@ -88,6 +99,7 @@ object CurrentSession {
         phoneNumber = null
         userRole = null
         farmId = ""
+        supervisorDuties = emptySet()
     }
 
     suspend fun clearSession(client: SupabaseClient) {

@@ -24,8 +24,5 @@ data class CropPlanting(
     @SerialName("planting_status") val plantingStatus: String,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("updated_at") val updatedAt: String? = null,
-    @SerialName("is_deleted") val isDeleted: Boolean = false
+    @SerialName("is_deleted") val isDeleted: Boolean = false,
 )
-
-
-

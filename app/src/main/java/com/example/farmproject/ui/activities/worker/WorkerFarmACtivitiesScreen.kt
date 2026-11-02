@@ -1,6 +1,7 @@
 package com.example.farmproject.ui.activities.worker
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,13 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.HourglassTop
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -33,9 +29,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -56,33 +52,6 @@ import com.example.farmproject.data.model.FarmActivityDisplay
 import com.example.farmproject.data.session.CurrentSession
 import com.example.farmproject.ui.activities.manager.FarmActivitiesUiState
 import com.example.farmproject.ui.activities.manager.FarmActivitiesViewModel
-import java.time.Duration
-import java.time.LocalDateTime
-import java.util.Locale
-
-private fun calculateDisplayDuration(activity: FarmActivity): String {
-    if (activity.durationHours != null && activity.durationHours > 0) {
-        val hrs = activity.durationHours
-        return if (hrs == 1.0) "1.0 hr" else String.format(Locale.US, "%.1f hrs", hrs)
-    }
-
-    val startStr = activity.startedAt ?: activity.startTime ?: activity.createdAt
-    val endStr = activity.completedAt ?: activity.endTime ?: activity.updatedAt
-
-    if (!startStr.isNullOrBlank() && !endStr.isNullOrBlank()) {
-        try {
-            val start = LocalDateTime.parse(startStr)
-            val end = LocalDateTime.parse(endStr)
-            val mins = Duration.between(start, end).toMinutes()
-            if (mins > 0) {
-                val hrs = mins / 60.0
-                return if (hrs == 1.0) "1.0 hr" else String.format(Locale.US, "%.1f hrs", hrs)
-            }
-        } catch (_: Exception) {}
-    }
-
-    return "1.0 hr"
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +60,7 @@ fun WorkerFarmActivitiesScreen(
     onBackClick: () -> Unit = {},
     onActivityClick: (String) -> Unit = {}
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Assigned, 1 = In Progress, 2 = Completed
     val uiState by viewModel.uiState.collectAsState()
 
     val workerUserId = CurrentSession.userId.orEmpty()
@@ -119,32 +88,35 @@ fun WorkerFarmActivitiesScreen(
 
                     Column {
                         Text(
-                            text = "Assigned Activities",
+                            text = "Worker Activities",
                             color = Color.White,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
                         )
 
                         Text(
-                            text = "View & perform worker tasks",
+                            text = "Assigned, In Progress & Completed Tasks",
                             color = Color.White.copy(alpha = 0.85f),
                             fontSize = 12.sp
                         )
                     }
                 }
 
-                TabRow(selectedTabIndex = selectedTab) {
+                PrimaryTabRow(selectedTabIndex = selectedTab) {
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("Assigned Activities") },
-                        icon = { Icon(imageVector = Icons.Default.HourglassTop, contentDescription = null) }
+                        text = { Text("Assigned") }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("Completed Activities") },
-                        icon = { Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null) }
+                        text = { Text("In Progress") }
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = { Text("Completed") }
                     )
                 }
             }
@@ -191,21 +163,38 @@ fun WorkerFarmActivitiesScreen(
                     // Filter activities assigned to worker
                     val workerActivities = allActivities.filter { display ->
                         val act = display.activity
+                        (act.assignedTo != null && act.assignedTo == workerUserId) ||
                         (act.workerProfileId != null && act.workerProfileId == workerUserId) ||
                         (display.assignedToName != null && display.assignedToName.equals(workerName, ignoreCase = true)) ||
-                        (act.method != null && act.method.contains("Worker", ignoreCase = true))
+                        (act.method != null && act.method.contains("Worker", ignoreCase = true)) ||
+                        display.assignedToName.isNullOrBlank() ||
+                        display.assignedToName.equals("Worker", ignoreCase = true) ||
+                        display.assignedToName.equals("Unassigned", ignoreCase = true)
                     }
 
                     val filteredActivities = workerActivities.filter { display ->
                         val st = display.activity.safeStatus
-                        if (selectedTab == 1) {
-                            st.equals("Completed", ignoreCase = true) || st.equals("completed", ignoreCase = true)
-                        } else {
-                            !st.equals("Completed", ignoreCase = true) && !st.equals("completed", ignoreCase = true)
+                        val isInProgress = st.equals("In Progress", ignoreCase = true) ||
+                                st.equals("in_progress", ignoreCase = true) ||
+                                st.equals("Ongoing", ignoreCase = true)
+                        val isCompleted = st.equals("Completed", ignoreCase = true) ||
+                                st.equals("completed", ignoreCase = true) ||
+                                st.equals("Done", ignoreCase = true)
+
+                        when (selectedTab) {
+                            0 -> !isInProgress && !isCompleted // Assigned / Pending
+                            1 -> isInProgress                   // In Progress
+                            2 -> isCompleted                    // Completed
+                            else -> true
                         }
                     }
 
-                    val tabTitle = if (selectedTab == 1) "Completed Activities" else "Assigned Activities"
+                    val tabTitle = when (selectedTab) {
+                        0 -> "Assigned Tasks"
+                        1 -> "In Progress Tasks"
+                        2 -> "Completed Activities"
+                        else -> "Tasks"
+                    }
 
                     LazyColumn(
                         modifier = Modifier
@@ -249,22 +238,26 @@ fun WorkerFarmActivitiesScreen(
                         } else {
                             items(filteredActivities) { activityDisplay ->
                                 val activityId = activityDisplay.activity.activityId.orEmpty()
-                                val isPending = !activityDisplay.activity.safeStatus.equals("In Progress", ignoreCase = true) &&
-                                        !activityDisplay.activity.safeStatus.equals("Completed", ignoreCase = true)
 
                                 WorkerActivityCard(
                                     activityDisplay = activityDisplay,
-                                    isCompletedTab = selectedTab == 1,
+                                    tabIndex = selectedTab,
                                     onClick = {
                                         if (activityId.isNotBlank()) {
                                             onActivityClick(activityId)
                                         }
                                     },
-                                    onStartClick = if (selectedTab == 0 && isPending && activityId.isNotBlank()) {
-                                        { viewModel.startActivity(activityId) }
+                                    onStartClick = if (selectedTab == 0 && activityId.isNotBlank()) {
+                                        {
+                                            viewModel.startActivity(activityId)
+                                            selectedTab = 1
+                                        }
                                     } else null,
-                                    onCompleteClick = if (selectedTab == 0 && !isPending && activityId.isNotBlank()) {
-                                        { viewModel.completeActivity(activityId) }
+                                    onCompleteClick = if (selectedTab == 1 && activityId.isNotBlank()) {
+                                        {
+                                            viewModel.completeActivity(activityId)
+                                            selectedTab = 2
+                                        }
                                     } else null
                                 )
                             }
@@ -300,32 +293,34 @@ private fun WorkerActivitySummaryCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(46.dp)
                         .background(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(14.dp)
+                            shape = RoundedCornerShape(12.dp)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Assignment,
+                        imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
 
-                Spacer(modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
                 Column {
                     Text(
-                        text = totalActivities.toString(),
+                        text = "$totalActivities",
                         style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Text(
                         text = labelText,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -336,191 +331,129 @@ private fun WorkerActivitySummaryCard(
 @Composable
 private fun WorkerActivityCard(
     activityDisplay: FarmActivityDisplay,
-    isCompletedTab: Boolean,
+    tabIndex: Int,
     onClick: () -> Unit,
     onStartClick: (() -> Unit)? = null,
     onCompleteClick: (() -> Unit)? = null
 ) {
+    val activity = activityDisplay.activity
+
+    val statusBg = when {
+        tabIndex == 1 -> Color(0xFFFFF8E1)
+        tabIndex == 2 -> Color(0xFFE8F5E9)
+        else -> Color(0xFFEFEBE9)
+    }
+
+    val statusTint = when {
+        tabIndex == 1 -> Color(0xFFF57F17)
+        tabIndex == 2 -> Color(0xFF2E7D32)
+        else -> Color(0xFF5D4037)
+    }
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(12.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Assignment,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                Spacer(modifier = Modifier.size(12.dp))
-
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = activityDisplay.displayTitle,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Text(
-                        text = activityDisplay.activityTypeName,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
+                Text(
+                    text = activityDisplay.displayTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
 
                 Box(
                     modifier = Modifier
-                        .background(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(20.dp)
-                        )
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .background(statusBg, shape = RoundedCornerShape(12.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = activityDisplay.activity.safeStatus,
-                        style = MaterialTheme.typography.labelSmall,
+                        text = activity.safeStatus,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = statusTint
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = activityDisplay.activityTypeName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                WorkerActivityInfoRow(
-                    icon = Icons.Default.Person,
-                    label = "Assigned to",
-                    value = activityDisplay.assignedToName ?: "Worker"
-                )
+                if (!activityDisplay.divisionName.isNullOrBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = activityDisplay.divisionName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
-                if (isCompletedTab) {
-                    WorkerActivityInfoRow(
-                        icon = Icons.Default.Schedule,
-                        label = "Duration",
-                        value = calculateDisplayDuration(activityDisplay.activity)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
-                } else {
-                    WorkerActivityInfoRow(
-                        icon = Icons.Default.CalendarMonth,
-                        label = "Due date",
-                        value = activityDisplay.activity.safeActivityDate
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Due: ${activity.safeActivityDate}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // Begin activity button
             if (onStartClick != null) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Button(
                     onClick = onStartClick,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1565C0)
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Begin activity",
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Start Activity", fontWeight = FontWeight.Bold)
                 }
             }
 
-            // Complete task button
             if (onCompleteClick != null) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Button(
                     onClick = onCompleteClick,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF2E7D32)
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Complete task",
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Complete Activity", fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun WorkerActivityInfoRow(
-    icon: ImageVector,
-    label: String,
-    value: String
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(10.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        Spacer(modifier = Modifier.width(10.dp))
-
-        Column {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall
-            )
-
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
-            )
         }
     }
 }

@@ -25,7 +25,7 @@ val ReportJson = Json {
 data class ReportCategoryStatus(
     @SerialName("farm_id") val farmId: String,
     @SerialName("category_id") val categoryId: String,
-    val code: String,                       // crop_yield, inventory, machinery, workforce, storage
+    val code: String,                       // crop_yield, inventory, expenses, storage
     val name: String,
     val description: String,
     val icon: String? = null,
@@ -65,7 +65,35 @@ fun ReportCategoryStatus.lastGeneratedLabel(zone: ZoneId = ZoneId.of("Africa/Nai
 // ---------------------------------------------------------------------
 sealed interface ReportSummary
 
-// ----- Crop Yield -----
+// ----- Crop Yield (Matches build_crop_yield_summary SQL function) -----
+@Serializable data class CropYieldCards(
+    @SerialName("total_harvest_kg") val totalHarvestKg: Double = 0.0,
+    @SerialName("avg_yield_per_acre") val avgYieldPerAcre: Double = 0.0,
+    @SerialName("total_sold_kg") val totalSoldKg: Double? = null,
+    @SerialName("in_storage_kg") val inStorageKg: Double = 0.0,
+)
+
+@Serializable data class HarvestRow(
+    @SerialName("harvest_id") val harvestId: String? = null,
+    val crop: String? = null,
+    val division: String? = null,
+    @SerialName("harvest_date") val harvestDate: String? = null,
+    val quantity: Double = 0.0,
+    val unit: String? = null,
+    @SerialName("quantity_kg") val quantityKg: Double = 0.0,
+    val grade: String? = null,
+    @SerialName("recorded_by") val recordedBy: String? = null,
+    val notes: String? = null,
+)
+
+@Serializable data class CropProductivityRow(
+    val crop: String,
+    val harvests: Int = 0,
+    @SerialName("actual_yield_kg") val actualYieldKg: Double = 0.0,
+    @SerialName("area_harvested_acres") val areaHarvestedAcres: Double = 0.0,
+    @SerialName("yield_per_acre") val yieldPerAcre: Double = 0.0,
+)
+
 @Serializable data class StatusCount(val status: String = "unknown", val plantings: Int = 0)
 @Serializable data class HarvestTotal(val unit: String? = null, val quantity: Double = 0.0, val harvests: Int = 0)
 @Serializable data class CropYieldRow(
@@ -97,8 +125,18 @@ sealed interface ReportSummary
     @SerialName("target_qty") val targetQty: Double? = null,
     @SerialName("target_achieved_pct") val targetAchievedPct: Double? = null,
 )
+
 @Serializable
 data class CropYieldSummary(
+    val cards: CropYieldCards? = null,
+    @SerialName("harvest_count") val harvestCount: Int = 0,
+    @SerialName("total_area_acres") val totalAreaAcres: Double = 0.0,
+    @SerialName("crops_harvested") val cropsHarvested: Int = 0,
+    @SerialName("unconverted_units") val unconvertedUnits: List<String> = emptyList(),
+    val harvests: List<HarvestRow> = emptyList(),
+    val productivity: List<CropProductivityRow> = emptyList(),
+
+    // Legacy fields for backward compatibility
     @SerialName("total_plantings") val totalPlantings: Int = 0,
     @SerialName("plantings_by_status") val plantingsByStatus: List<StatusCount> = emptyList(),
     @SerialName("harvest_totals") val harvestTotals: List<HarvestTotal> = emptyList(),
@@ -157,78 +195,60 @@ data class InventorySummary(
     @SerialName("water_usage") val waterUsage: List<WaterUsageRow> = emptyList(),
 ) : ReportSummary
 
-// ----- Machinery -----
-@Serializable data class FuelRow(
-    @SerialName("fuel_unit") val fuelUnit: String? = null,
-    @SerialName("fuel_used") val fuelUsed: Double = 0.0,
-)
-@Serializable data class MachineUsageRow(
-    @SerialName("machinery_id") val machineryId: String,
-    val sessions: Int = 0,
-    @SerialName("hours_used") val hoursUsed: Double = 0.0,
-    @SerialName("fuel_used") val fuelUsed: Double = 0.0,
-    @SerialName("last_hour_meter") val lastHourMeter: Double? = null,
-    @SerialName("latest_condition") val latestCondition: String? = null,
-)
-@Serializable data class MaintenanceTypeRow(
-    @SerialName("maintenance_type") val maintenanceType: String? = null,
-    val records: Int = 0,
-    val cost: Double = 0.0,
-)
-@Serializable data class MaintenanceStats(
-    @SerialName("records_in_period") val recordsInPeriod: Int = 0,
-    @SerialName("total_cost") val totalCost: Double = 0.0,
-    @SerialName("by_type") val byType: List<MaintenanceTypeRow> = emptyList(),
-)
-@Serializable data class MaintenanceDueRow(
-    @SerialName("machinery_id") val machineryId: String,
-    @SerialName("last_maintenance_type") val lastMaintenanceType: String? = null,
-    @SerialName("last_maintenance_date") val lastMaintenanceDate: String? = null,
-    @SerialName("next_maintenance_date") val nextMaintenanceDate: String? = null,
-    @SerialName("days_until_due") val daysUntilDue: Int = 0,
-    @SerialName("is_overdue") val isOverdue: Boolean = false,
-)
-@Serializable
-data class MachinerySummary(
-    @SerialName("usage_sessions") val usageSessions: Int = 0,
-    @SerialName("total_hours_used") val totalHoursUsed: Double = 0.0,
-    @SerialName("machines_used") val machinesUsed: Int = 0,
-    @SerialName("fuel_used") val fuelUsed: List<FuelRow> = emptyList(),
-    @SerialName("by_machine") val byMachine: List<MachineUsageRow> = emptyList(),
-    val maintenance: MaintenanceStats = MaintenanceStats(),
-    @SerialName("maintenance_due") val maintenanceDue: List<MaintenanceDueRow> = emptyList(),
-) : ReportSummary
-
-// ----- Workforce -----
-@Serializable data class EmployeeRow(
-    @SerialName("worker_profile_id") val workerProfileId: String,
-    @SerialName("employee_number") val employeeNumber: String? = null,
-    @SerialName("worker_name") val workerName: String? = null,
-    @SerialName("days_present") val daysPresent: Int = 0,
-    @SerialName("days_late") val daysLate: Int = 0,
-    @SerialName("days_absent") val daysAbsent: Int = 0,
-    @SerialName("days_on_leave") val daysOnLeave: Int = 0,
-    @SerialName("activities_assigned") val activitiesAssigned: Int = 0,
-    @SerialName("activities_completed") val activitiesCompleted: Int = 0,
-    @SerialName("hours_worked") val hoursWorked: Double = 0.0,
-    @SerialName("completion_rate_pct") val completionRatePct: Double? = null,
+// ----- Expenses (Matches build_expenses_summary SQL function) -----
+@Serializable data class ExpenseCategoryBreakdown(
+    @SerialName("category_id") val categoryId: String? = null,
+    @SerialName("category_name") val categoryName: String? = null,
+    val category: String? = null,
+    val count: Int = 0,
+    val total: Double = 0.0,
+    val percentage: Double = 0.0,
 ) {
-    val displayName: String get() = workerName ?: employeeNumber ?: "Unnamed worker"
+    val name: String get() = categoryName ?: category ?: "Uncategorised"
 }
-@Serializable data class ActivityCategoryRow(
-    val category: String = "uncategorised",
-    val activities: Int = 0,
-    val hours: Double = 0.0,
+
+@Serializable data class ExpenseDivisionBreakdown(
+    @SerialName("division_id") val divisionId: String? = null,
+    @SerialName("division_name") val divisionName: String? = null,
+    val count: Int = 0,
+    val total: Double = 0.0,
 )
+
+@Serializable data class ExpenseMonthBreakdown(
+    val month: String,
+    val total: Double = 0.0,
+)
+
+@Serializable data class ExpensePaymentMethodBreakdown(
+    val method: String,
+    val total: Double = 0.0,
+)
+
+@Serializable data class ExpenseRow(
+    @SerialName("expense_id") val expenseId: String? = null,
+    val description: String,
+    val category: String? = null,
+    val amount: Double = 0.0,
+    @SerialName("expense_date") val expenseDate: String? = null,
+    val supplier: String? = null,
+    @SerialName("supplier_name") val supplierName: String? = null,
+    @SerialName("payment_method") val paymentMethod: String? = null,
+) {
+    val payee: String? get() = supplierName ?: supplier
+}
+
 @Serializable
-data class WorkforceSummary(
-    @SerialName("total_workers") val totalWorkers: Int = 0,
-    @SerialName("total_hours_worked") val totalHoursWorked: Double = 0.0,
-    @SerialName("activities_assigned") val activitiesAssigned: Int = 0,
-    @SerialName("activities_completed") val activitiesCompleted: Int = 0,
-    @SerialName("overall_completion_rate_pct") val overallCompletionRatePct: Double? = null,
-    val employees: List<EmployeeRow> = emptyList(),
-    @SerialName("activities_by_category") val activitiesByCategory: List<ActivityCategoryRow> = emptyList(),
+data class ExpenseSummary(
+    @SerialName("total_expenses") val totalExpenses: Double = 0.0,
+    @SerialName("expense_count") val expenseCount: Int = 0,
+    @SerialName("average_expense") val averageExpense: Double = 0.0,
+    @SerialName("largest_expense") val largestExpense: Double = 0.0,
+    @SerialName("by_category") val byCategory: List<ExpenseCategoryBreakdown> = emptyList(),
+    @SerialName("by_division") val byDivision: List<ExpenseDivisionBreakdown> = emptyList(),
+    @SerialName("by_month") val byMonth: List<ExpenseMonthBreakdown> = emptyList(),
+    @SerialName("by_payment_method") val byPaymentMethod: List<ExpensePaymentMethodBreakdown> = emptyList(),
+    @SerialName("top_expenses") val topExpenses: List<ExpenseRow> = emptyList(),
+    val expenses: List<ExpenseRow> = emptyList(),
 ) : ReportSummary
 
 // ----- Storage -----
@@ -266,8 +286,7 @@ fun parseReportSummary(code: String, summary: JsonObject): ReportSummary? = runC
     when (code) {
         "crop_yield" -> ReportJson.decodeFromJsonElement(CropYieldSummary.serializer(), summary)
         "inventory"  -> ReportJson.decodeFromJsonElement(InventorySummary.serializer(), summary)
-        "machinery"  -> ReportJson.decodeFromJsonElement(MachinerySummary.serializer(), summary)
-        "workforce"  -> ReportJson.decodeFromJsonElement(WorkforceSummary.serializer(), summary)
+        "expenses"   -> ReportJson.decodeFromJsonElement(ExpenseSummary.serializer(), summary)
         "storage"    -> ReportJson.decodeFromJsonElement(StorageSummary.serializer(), summary)
         else -> null
     }

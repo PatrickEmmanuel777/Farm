@@ -17,7 +17,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
@@ -27,8 +29,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,11 +45,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.farmproject.ui.common.ChangePasswordDialog
+import kotlinx.coroutines.launch
 
 private data class WorkerSettingsOption(
     val title: String,
     val description: String,
     val icon: ImageVector,
+    val isDestructive: Boolean = false,
     val onClick: () -> Unit
 )
 
@@ -49,8 +61,13 @@ private data class WorkerSettingsOption(
 fun WorkerSettingsScreen(
     onBackClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
-    onNotificationsClick: () -> Unit = {}
+    onNotificationsClick: () -> Unit = {},
+    onLogoutClick: () -> Unit = {}
 ) {
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
     val options = listOf(
         WorkerSettingsOption(
             title = "Worker Profile",
@@ -59,15 +76,29 @@ fun WorkerSettingsScreen(
             onClick = onProfileClick
         ),
         WorkerSettingsOption(
+            title = "Change Password",
+            description = "Update your account password securely",
+            icon = Icons.Default.Lock,
+            onClick = { showChangePasswordDialog = true }
+        ),
+        WorkerSettingsOption(
             title = "Notifications",
             description = "Manage task alerts and notification preferences",
             icon = Icons.Default.Notifications,
             onClick = onNotificationsClick
+        ),
+        WorkerSettingsOption(
+            title = "Log Out",
+            description = "Sign out of your worker account",
+            icon = Icons.AutoMirrored.Filled.Logout,
+            isDestructive = true,
+            onClick = onLogoutClick
         )
     )
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Row(
                 modifier = Modifier
@@ -95,7 +126,7 @@ fun WorkerSettingsScreen(
                     )
 
                     Text(
-                        text = "Manage account & worker preferences",
+                        text = "Manage profile & account preferences",
                         color = Color.White.copy(alpha = 0.85f),
                         fontSize = 12.sp
                     )
@@ -130,12 +161,35 @@ fun WorkerSettingsScreen(
             }
         }
     }
+
+    if (showChangePasswordDialog) {
+        ChangePasswordDialog(
+            onDismiss = { showChangePasswordDialog = false },
+            onSuccess = { msg ->
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(msg)
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun WorkerSettingsOptionCard(
     option: WorkerSettingsOption
 ) {
+    val iconContainerColor = if (option.isDestructive) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.primaryContainer
+    }
+
+    val iconTint = if (option.isDestructive) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         onClick = option.onClick,
@@ -154,7 +208,7 @@ private fun WorkerSettingsOptionCard(
                 modifier = Modifier
                     .size(46.dp)
                     .background(
-                        color = MaterialTheme.colorScheme.primaryContainer,
+                        color = iconContainerColor,
                         shape = RoundedCornerShape(12.dp)
                     ),
                 contentAlignment = Alignment.Center
@@ -162,7 +216,7 @@ private fun WorkerSettingsOptionCard(
                 Icon(
                     imageVector = option.icon,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = iconTint
                 )
             }
 
@@ -172,7 +226,8 @@ private fun WorkerSettingsOptionCard(
                 Text(
                     text = option.title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = if (option.isDestructive) MaterialTheme.colorScheme.error else Color.Unspecified
                 )
 
                 Text(

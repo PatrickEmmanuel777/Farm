@@ -17,10 +17,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Agriculture
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PrecisionManufacturing
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,6 +43,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.farmproject.data.model.SupervisorDuty
+import com.example.farmproject.data.session.CurrentSession
 
 private data class SupervisorMoreOption(
     val title: String,
@@ -51,30 +58,103 @@ private data class SupervisorMoreOption(
 @Composable
 fun SupervisorMoreScreen(
     onBackClick: () -> Unit = {},
+    onActivitiesClick: () -> Unit = {},
+    onInventoryClick: () -> Unit = {},
+    onMachineryClick: () -> Unit = {},
     onAttendanceClick: () -> Unit = {},
+    onYieldsClick: () -> Unit = {},
+    onExpensesClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {}
 ) {
-    val options = listOf(
-        SupervisorMoreOption(
-            title = "Field Worker Attendance",
-            description = "Clock-in workers & mark daily field attendance",
-            icon = Icons.Default.CalendarMonth,
-            onClick = onAttendanceClick
-        ),
+    val options = mutableListOf<SupervisorMoreOption>()
+
+    val isManager = CurrentSession.isManager()
+    val hasActivitiesDuty = isManager || CurrentSession.hasDuty(SupervisorDuty.ACTIVITIES_RESOURCES)
+    val hasAttendanceDuty = isManager || CurrentSession.hasDuty(SupervisorDuty.ATTENDANCE)
+    val hasYieldDuty = isManager || CurrentSession.hasDuty(SupervisorDuty.YIELD_HARVEST)
+    val hasExpenseDuty = isManager || CurrentSession.hasDuty(SupervisorDuty.EXPENSE)
+
+    if (hasActivitiesDuty) {
+        options.add(
+            SupervisorMoreOption(
+                title = "Field Activities",
+                description = "Create and update farm field activities & tasks",
+                icon = Icons.AutoMirrored.Filled.Assignment,
+                onClick = onActivitiesClick
+            )
+        )
+        options.add(
+            SupervisorMoreOption(
+                title = "Resources & Inventory",
+                description = "Manage farm inputs, fertilizers, and requisitions",
+                icon = Icons.Default.Inventory2,
+                onClick = onInventoryClick
+            )
+        )
+        options.add(
+            SupervisorMoreOption(
+                title = "Machinery & Equipment",
+                description = "Monitor farm machinery, usage and maintenance",
+                icon = Icons.Default.PrecisionManufacturing,
+                onClick = onMachineryClick
+            )
+        )
+    }
+
+    if (hasAttendanceDuty) {
+        options.add(
+            SupervisorMoreOption(
+                title = "Worker Attendance Log",
+                description = "Clock-in workers, view logs & review pending requests",
+                icon = Icons.Default.CalendarMonth,
+                onClick = onAttendanceClick
+            )
+        )
+    }
+
+    if (hasYieldDuty) {
+        options.add(
+            SupervisorMoreOption(
+                title = "Record Crop Harvest",
+                description = "Record crop harvest yields on manager's behalf",
+                icon = Icons.Default.Agriculture,
+                onClick = onYieldsClick
+            )
+        )
+    }
+
+    if (hasExpenseDuty) {
+        options.add(
+            SupervisorMoreOption(
+                title = "Record Expenses (Add Only)",
+                description = "Add farm expenses (read & create only)",
+                icon = Icons.Default.AttachMoney,
+                onClick = onExpensesClick
+            )
+        )
+    }
+
+    options.add(
         SupervisorMoreOption(
             title = "Supervisor Profile",
             description = "View and manage your personal profile",
             icon = Icons.Default.Person,
             onClick = onProfileClick
-        ),
+        )
+    )
+
+    options.add(
         SupervisorMoreOption(
             title = "Settings",
             description = "Manage supervisor preferences and settings",
             icon = Icons.Default.Settings,
             onClick = onSettingsClick
-        ),
+        )
+    )
+
+    options.add(
         SupervisorMoreOption(
             title = "Log Out",
             description = "Sign out of your supervisor account",
@@ -106,14 +186,14 @@ fun SupervisorMoreScreen(
 
                 Column {
                     Text(
-                        text = "More",
+                        text = "More Options",
                         color = Color.White,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
 
                     Text(
-                        text = "Supervisor menu & settings",
+                        text = "Supervisor role-based tools & settings",
                         color = Color.White.copy(alpha = 0.85f),
                         fontSize = 12.sp
                     )
@@ -133,7 +213,7 @@ fun SupervisorMoreScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Menu & Options",
+                    text = "Role Features & Options",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )

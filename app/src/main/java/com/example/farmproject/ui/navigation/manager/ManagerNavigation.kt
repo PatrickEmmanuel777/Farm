@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -86,6 +87,8 @@ import com.example.farmproject.ui.settings.manager.ManagerSettingsScreen
 import com.example.farmproject.ui.attendance.manager.ManagerAttendanceScreen
 import com.example.farmproject.ui.chat.ChatRoutes
 import com.example.farmproject.ui.chat.chatGraph
+import com.example.farmproject.ui.expense.ExpenseViewModel
+import com.example.farmproject.ui.expense.ManagerExpenseScreen
 import com.example.farmproject.ui.storage.manager.ManagerAddStorageScreen
 import com.example.farmproject.ui.storage.manager.ManagerStorageDetailsScreen
 import com.example.farmproject.ui.storage.manager.ManagerStorageScreen
@@ -178,6 +181,7 @@ private object ManagerRoutes {
     const val GENERATE_REPORT = "manager_generate_report"
     const val REPORT_DETAILS = "manager_report_details/{reportTitle}"
     const val ATTENDANCE = "manager_attendance"
+    const val EXPENSES = "manager_expenses"
 }
 
 /**
@@ -255,7 +259,9 @@ fun ManagerNavigation(
     Scaffold(
         bottomBar = {
             if (!isFormScreen) {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = Color(0xFFF2F6F1)
+                ) {
                     tabs.forEach { tab ->
                         NavigationBarItem(
                             selected = currentRoute == tab.route,
@@ -300,6 +306,7 @@ fun ManagerNavigation(
                         onStorageClick = { navController.navigate(ManagerRoutes.STORAGE) },
                         onDivisionsClick = { navController.navigate(ManagerRoutes.DIVISIONS) },
                         onActivitiesClick = { navigateToTab(ManagerTab.FarmActivities.route) },
+                        onYieldsClick = { navController.navigate(ManagerRoutes.YIELD) },
                         onAddCropClick = { navController.navigate(ManagerRoutes.ADD_CROP) },
                         onLogActivityClick = { navController.navigate(ManagerRoutes.ADD_FARM_ACTIVITY) },
                         onAddWorkerClick = { navController.navigate(ManagerRoutes.ADD_WORKER) },
@@ -560,6 +567,7 @@ fun ManagerNavigation(
                         equipmentNeeded = display?.activity?.equipmentNeeded,
                         workers = formOptions.workers,
                         supervisors = formOptions.supervisors,
+                        isManagerRole = true,
                         onBackClick = {
                             navController.popBackStack()
                         },
@@ -689,13 +697,14 @@ fun ManagerNavigation(
                         onBackClick = {
                             navController.popBackStack()
                         },
-                        onSaveClick = { fullName, email, phoneNumber, employeeNumber, password ->
+                        onSaveClick = { fullName, email, phoneNumber, employeeNumber, password, duties ->
                             viewModel.addSupervisor(
                                 fullName = fullName,
                                 email = email,
                                 phoneNumber = phoneNumber,
                                 employeeNumber = employeeNumber,
-                                password = password
+                                password = password,
+                                duties = duties
                             )
                         }
                     )
@@ -803,11 +812,6 @@ fun ManagerNavigation(
                         viewModel = viewModel,
                         onBackClick = {
                             navController.popBackStack()
-                        },
-                        onAddClick = {
-                            navController.navigate(
-                                ManagerRoutes.ADD_INVENTORY
-                            )
                         },
                         onCategoryClick = { category ->
                             navController.navigate(
@@ -1102,6 +1106,11 @@ fun ManagerNavigation(
                                 ManagerRoutes.CROP_RECOMMENDATIONS
                             )
                         },
+                        onExpensesClick = {
+                            navController.navigate(
+                                ManagerRoutes.EXPENSES
+                            )
+                        },
                         onSettingsClick = {
                             navController.navigate(
                                 ManagerRoutes.SETTINGS
@@ -1276,8 +1285,19 @@ fun ManagerNavigation(
                     )
                 }
 
+                composable(ManagerRoutes.EXPENSES) {
+                    val viewModel: ExpenseViewModel = viewModel()
+                    ManagerExpenseScreen(
+                        viewModel = viewModel,
+                        onBackClick = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
                 chatGraph(navController, chatRepository)
             }
         }
     }
 }
+

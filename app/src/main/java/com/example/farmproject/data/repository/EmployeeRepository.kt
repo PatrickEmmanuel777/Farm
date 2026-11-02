@@ -574,33 +574,48 @@ class EmployeeRepository(
         isSupervisor: Boolean
     ): Result<Unit> {
         return try {
-            if (accountId.isNotBlank()) {
+            var targetAccountId = accountId.trim()
+
+            if (targetAccountId.isBlank() && profileId.isNotBlank()) {
+                val table = if (isSupervisor) "supervisor_profile" else "worker_profile"
+                val pkColumn = if (isSupervisor) "supervisor_profile_id" else "worker_profile_id"
+                val rows = runCatching {
+                    client.from(table)
+                        .select { filter { eq(pkColumn, profileId) } }
+                        .decodeList<JsonObject>()
+                }.getOrDefault(emptyList())
+
+                targetAccountId = rows.firstOrNull()?.get("account_id")?.jsonPrimitive?.contentOrNull.orEmpty()
+            }
+
+            if (targetAccountId.isNotBlank()) {
+                val accountPayload = buildJsonObject {
+                    put("full_name", fullName.trim())
+                    put("phone_number", phoneNumber?.trim()?.ifBlank { null })
+                }
+
                 client.from("account")
-                    .update(
-                        buildJsonObject {
-                            put("full_name", fullName)
-                            if (phoneNumber != null) put("phone_number", phoneNumber)
-                        }
-                    ) {
-                        filter { eq("account_id", accountId) }
+                    .update(accountPayload) {
+                        filter { eq("account_id", targetAccountId) }
                     }
             }
 
             if (profileId.isNotBlank()) {
                 val table = if (isSupervisor) "supervisor_profile" else "worker_profile"
                 val pkColumn = if (isSupervisor) "supervisor_profile_id" else "worker_profile_id"
+                val profilePayload = buildJsonObject {
+                    put("employee_number", employeeNumber?.trim()?.ifBlank { null })
+                }
+
                 client.from(table)
-                    .update(
-                        buildJsonObject {
-                            if (employeeNumber != null) put("employee_number", employeeNumber)
-                        }
-                    ) {
+                    .update(profilePayload) {
                         filter { eq(pkColumn, profileId) }
                     }
             }
 
             Result.success(Unit)
         } catch (e: Exception) {
+            Log.e(TAG, "updateEmployee failed: ${e.message}", e)
             Result.failure(e)
         }
     }

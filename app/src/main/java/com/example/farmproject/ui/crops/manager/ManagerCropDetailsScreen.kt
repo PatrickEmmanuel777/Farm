@@ -17,11 +17,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,7 +72,7 @@ fun ManagerCropDetailsScreen(
             ) {
                 IconButton(onClick = onBackClick) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White
                     )
@@ -172,7 +172,7 @@ fun ManagerCropDetailsScreen(
 
             // NOTES / ADDITIONAL INFORMATION
             SectionTitle(
-                icon = Icons.Default.Notes,
+                icon = Icons.AutoMirrored.Filled.Notes,
                 title = "Additional Information"
             )
 
@@ -288,7 +288,7 @@ private fun StatusBadge(
 @Composable
 private fun SectionTitle(
     icon: ImageVector,
-    title: String
+    @Suppress("SameParameterValue") title: String
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),

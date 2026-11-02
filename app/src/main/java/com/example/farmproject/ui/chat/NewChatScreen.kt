@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.example.farmproject.data.model.Contact
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,7 +73,7 @@ fun NewChatScreen(
     // Re-runs when the query changes (after a 300 ms typing pause) or on Retry.
     LaunchedEffect(query, reloadKey) {
         loading = true
-        if (query.isNotEmpty()) delay(300)
+        if (query.isNotEmpty()) delay(300.milliseconds)
         runCatching { search(query.trim()) }
             .onSuccess {
                 contacts = it

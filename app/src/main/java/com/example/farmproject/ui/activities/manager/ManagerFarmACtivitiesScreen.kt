@@ -37,9 +37,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -111,7 +111,7 @@ fun ManagerFarmActivitiesScreen(
                     }
                 )
 
-                TabRow(selectedTabIndex = selectedTab) {
+                PrimaryTabRow(selectedTabIndex = selectedTab) {
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
@@ -282,12 +282,8 @@ fun ManagerFarmActivitiesScreen(
                                     onClick = {
                                         if (activityId.isNotBlank()) onActivityClick(activityId)
                                     },
-                                    onStartClick = if (selectedTab == 0 && activityId.isNotBlank()) {
-                                        { viewModel.startActivity(activityId) }
-                                    } else null,
-                                    onCompleteClick = if (selectedTab == 1 && activityId.isNotBlank()) {
-                                        { viewModel.completeActivity(activityId) }
-                                    } else null
+                                    onStartClick = null,
+                                    onCompleteClick = null
                                 )
                             }
                         }

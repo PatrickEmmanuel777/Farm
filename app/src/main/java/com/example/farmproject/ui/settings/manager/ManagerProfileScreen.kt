@@ -322,7 +322,7 @@ private fun ProfileForm(
 @Composable
 private fun SectionTitle(
     icon: ImageVector,
-    title: String
+    @Suppress("SameParameterValue") title: String
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),

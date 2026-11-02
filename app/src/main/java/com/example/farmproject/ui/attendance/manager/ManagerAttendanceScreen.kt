@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,12 +19,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,11 +38,11 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,33 +67,45 @@ fun ManagerAttendanceScreen(
     onBackClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
     var searchQuery by remember { mutableStateOf("") }
-    var selectedRoleFilter by remember { mutableStateOf("All") } // "All", "Workers", "Supervisors"
+    var selectedRoleFilter by remember { mutableStateOf("All") }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                title = {
-                    Column {
-                        Text(
-                            text = "Attendance Records",
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Daily attendance output for supervisors and workers",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
                 }
-            )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Column {
+                    Text(
+                        text = "Farm Staff Attendance",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        text = "Track and mark daily staff attendance",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 12.sp
+                    )
+                }
+            }
         }
     ) { innerPadding ->
         Box(
@@ -109,7 +127,7 @@ fun ManagerAttendanceScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(24.dp),
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -224,7 +242,10 @@ fun ManagerAttendanceScreen(
                         } else {
                             items(filteredItems) { display ->
                                 WorkerAttendanceCard(
-                                    display = display
+                                    display = display,
+                                    onMarkStatus = { status ->
+                                        viewModel.markAttendance(display.workerProfileId, status)
+                                    }
                                 )
                             }
                         }
@@ -343,26 +364,24 @@ private fun SummaryBadgeCard(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = badgeColor.copy(alpha = 0.12f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 10.dp, horizontal = 4.dp),
+            modifier = Modifier.padding(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = count.toString(),
-                fontSize = 18.sp,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = badgeColor
             )
+
             Text(
                 text = label,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = badgeColor
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -370,7 +389,8 @@ private fun SummaryBadgeCard(
 
 @Composable
 private fun WorkerAttendanceCard(
-    display: AttendanceDisplay
+    display: AttendanceDisplay,
+    onMarkStatus: (String) -> Unit
 ) {
     val currentStatus = display.currentStatus
 
@@ -390,6 +410,14 @@ private fun WorkerAttendanceCard(
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
+    val statusIcon = when (currentStatus.lowercase()) {
+        "present" -> Icons.Default.CheckCircle
+        "late" -> Icons.Default.Schedule
+        "absent" -> Icons.Default.Cancel
+        "on leave" -> Icons.Default.EventBusy
+        else -> Icons.Default.HelpOutline
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -397,7 +425,10 @@ private fun WorkerAttendanceCard(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -439,20 +470,27 @@ private fun WorkerAttendanceCard(
                         .background(statusBgColor, shape = RoundedCornerShape(16.dp))
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
-                    Text(
-                        text = currentStatus,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = statusTextColor
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = statusIcon,
+                            contentDescription = null,
+                            tint = statusTextColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = currentStatus,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = statusTextColor
+                        )
+                    }
                 }
             }
 
             // Clock-In / Clock-Out Info Row
             val checkInTime = display.record?.checkIn?.take(16)?.replace("T", " ") ?: "--:--"
             val checkOutTime = display.record?.checkOut?.take(16)?.replace("T", " ") ?: "--:--"
-
-            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -470,6 +508,54 @@ private fun WorkerAttendanceCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            // One-Tap Quick Actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { onMarkStatus("present") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2E7D32)),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Present", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = { onMarkStatus("late") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE65100)),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Late", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = { onMarkStatus("absent") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828)),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Absent", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

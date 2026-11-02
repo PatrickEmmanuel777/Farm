@@ -49,6 +49,7 @@ class ManagerSignUpViewModel(
         }
     }
 
+    @Suppress("unused")
     fun resetState() {
         _uiState.value = SignUpUiState.Idle
     }

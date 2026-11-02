@@ -19,16 +19,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Agriculture
-import androidx.compose.material.icons.filled.Biotech
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Grass
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -60,7 +54,6 @@ import com.example.farmproject.data.model.InventoryCategory
 fun ManagerInventoryScreen(
     viewModel: InventoryViewModel = viewModel(),
     onBackClick: () -> Unit = {},
-    onAddClick: () -> Unit = {},
     onCategoryClick: (InventoryCategory) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()

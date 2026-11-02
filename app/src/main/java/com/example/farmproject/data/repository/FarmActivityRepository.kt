@@ -7,12 +7,14 @@ import com.example.farmproject.data.remote.SupabaseClientProvider
 import com.example.farmproject.data.session.CurrentSession
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import java.time.Duration
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.util.UUID
 
 @Serializable
@@ -46,7 +48,8 @@ internal data class AccountNameLookup(
 )
 
 class FarmActivityRepository(
-    private val client: SupabaseClient = SupabaseClientProvider.client
+    private val client: SupabaseClient = SupabaseClientProvider.client,
+    private val employeeRepository: EmployeeRepository = EmployeeRepository(client)
 ) {
 
     private fun String.isValidUuid(): Boolean {
@@ -98,8 +101,6 @@ class FarmActivityRepository(
                 .decodeSingle<ActivityType>()
             return inserted.activityTypeId ?: newTypeId
         } catch (_: Exception) {
-            // 4. Fallback if insert fails (e.g. database permissions / RLS):
-            // Return any existing activityTypeId so foreign key constraint farm_activity_activity_type_id_fkey passes
             return existingTypes.firstOrNull()?.activityTypeId ?: newTypeId
         }
     }
@@ -122,19 +123,19 @@ class FarmActivityRepository(
         val validFarmId = if (farmId.isValidUuid()) farmId else CurrentSession.ensureFarmId(client)
 
         val fetchedActivities = try {
-            client.from("farm_activity")
-                .select {
-                    filter {
-                        if (validFarmId.isNotBlank()) {
-                            eq("farm_id", validFarmId)
-                        }
-                    }
-                }
+            client.postgrest
+                .rpc("list_farm_activities", buildJsonObject { put("p_farm_id", validFarmId) })
                 .decodeList<FarmActivity>()
         } catch (_: Exception) {
             try {
                 client.from("farm_activity")
-                    .select()
+                    .select {
+                        filter {
+                            if (validFarmId.isNotBlank()) {
+                                eq("farm_id", validFarmId)
+                            }
+                        }
+                    }
                     .decodeList<FarmActivity>()
             } catch (_: Exception) {
                 emptyList()
@@ -155,6 +156,7 @@ class FarmActivityRepository(
 
         val activityTypeIds = activities.mapNotNull { it.activityTypeId }.filter { it.isValidUuid() }.distinct()
         val divisionIds = activities.mapNotNull { it.divisionId }.filter { it.isValidUuid() }.distinct()
+        val assignedAccountIds = activities.mapNotNull { it.assignedTo }.filter { it.isValidUuid() }.distinct()
         val workerProfileIds = activities.mapNotNull { it.workerProfileId }.filter { it.isValidUuid() }.distinct()
         val supervisorProfileIds = activities.mapNotNull { it.supervisorProfileId }.filter { it.isValidUuid() }.distinct()
 
@@ -218,7 +220,7 @@ class FarmActivityRepository(
             }
         }
 
-        val allAccountIds = (workerAccountIds.values + supervisorAccountIds.values).distinct()
+        val allAccountIds = (assignedAccountIds + workerAccountIds.values + supervisorAccountIds.values).distinct()
 
         val accountNames = if (allAccountIds.isEmpty()) {
             emptyMap()
@@ -237,6 +239,9 @@ class FarmActivityRepository(
 
         return activities.map { activity ->
             val assignedToName = when {
+                activity.assignedTo != null ->
+                    accountNames[activity.assignedTo]
+
                 activity.workerProfileId != null ->
                     workerAccountIds[activity.workerProfileId]?.let { accountNames[it] }
 
@@ -268,6 +273,16 @@ class FarmActivityRepository(
     }
 
     suspend fun getFarmActivityById(activityId: String): FarmActivity? {
+        val rpcResult = runCatching {
+            client.postgrest
+                .rpc("get_farm_activity", buildJsonObject { put("p_activity_id", activityId) })
+                .decodeSingle<FarmActivity>()
+        }
+
+        if (rpcResult.isSuccess) {
+            return rpcResult.getOrThrow()
+        }
+
         return try {
             client.from("farm_activity")
                 .select {
@@ -285,70 +300,85 @@ class FarmActivityRepository(
         val targetFarmId = activity.safeFarmId
         val resolvedFarmId = if (targetFarmId.isValidUuid()) targetFarmId else CurrentSession.ensureFarmId(client)
         val resolvedTypeId = resolveActivityTypeId(activity.safeActivityTypeId)
-        val resolvedWorkerId = if (activity.workerProfileId?.isValidUuid() == true) activity.workerProfileId else null
-        val resolvedSupervisorId = if (activity.supervisorProfileId?.isValidUuid() == true) activity.supervisorProfileId else null
         val resolvedDivisionId = if (activity.divisionId?.isValidUuid() == true) activity.divisionId else null
 
-        val todayDate = try {
-            LocalDate.now().toString()
-        } catch (_: Exception) {
-            "2026-03-30"
+        // Resolve assigned_to (account_id)
+        var resolvedAccountId = activity.assignedTo?.ifBlank { null }
+        if (resolvedAccountId == null && !activity.workerProfileId.isNullOrBlank()) {
+            val workers = employeeRepository.getWorkersForFarm(resolvedFarmId)
+            resolvedAccountId = workers.find { it.profileId == activity.workerProfileId }?.accountId
+        }
+        if (resolvedAccountId == null && !activity.supervisorProfileId.isNullOrBlank()) {
+            val supervisors = employeeRepository.getSupervisorsForFarm(resolvedFarmId)
+            resolvedAccountId = supervisors.find { it.profileId == activity.supervisorProfileId }?.accountId
+        }
+        if (resolvedAccountId == null) {
+            resolvedAccountId = CurrentSession.userId.orEmpty()
         }
 
-        val cleanDate = activity.safeActivityDate.trim().ifBlank { todayDate }
+        val newActivityId = activity.activityId ?: UUID.randomUUID().toString()
+        val taskName = activity.displayTitle.ifBlank { "General Activity" }
+        val cleanDate = activity.safeActivityDate.ifBlank {
+            try { LocalDate.now().toString() } catch (_: Exception) { "2026-10-28" }
+        }
+        val dbStatus = when (activity.safeStatus.lowercase().replace(" ", "_")) {
+            "in_progress", "in-progress", "ongoing" -> "in_progress"
+            "completed", "done" -> "completed"
+            else -> "pending"
+        }
 
-        val baseActivity = activity.copy(
-            activityId = activity.activityId ?: UUID.randomUUID().toString(),
-            farmId = resolvedFarmId,
-            activityTypeId = resolvedTypeId,
-            divisionId = resolvedDivisionId,
-            workerProfileId = resolvedWorkerId,
-            supervisorProfileId = resolvedSupervisorId,
-            activityDate = cleanDate
-        )
+        // 1. Try create_farm_activity RPC
+        val rpcParams = buildJsonObject {
+            put("p_name", taskName)
+            put("p_activity_type_id", resolvedTypeId)
+            put("p_farm_id", resolvedFarmId)
+            put("p_assigned_to", resolvedAccountId)
+            put("p_finish_at", "${cleanDate}T17:00:00Z")
+            resolvedDivisionId?.let { put("p_division_id", it) }
+            put("p_status", dbStatus)
+        }
 
-        val rawStatus = activity.safeStatus.trim().ifBlank { "Pending" }
-        val statusCandidates = when {
-            rawStatus.equals("Pending", ignoreCase = true) || rawStatus.equals("Overdue", ignoreCase = true) ->
-                listOf("pending", "Pending", "PENDING", "scheduled", "Scheduled", "SCHEDULED", "planned", "Planned", "PLANNED", "active", "Active", "ACTIVE", "open", "Open", "new", "New", "draft", "Draft", "todo", "To Do")
+        val rpcResult = runCatching {
+            client.postgrest
+                .rpc("create_farm_activity", rpcParams)
+                .decodeSingle<FarmActivity>()
+        }
 
-            rawStatus.equals("In Progress", ignoreCase = true) || rawStatus.contains("progress", ignoreCase = true) ->
-                listOf("in_progress", "in progress", "in-progress", "In Progress", "In_Progress", "IN_PROGRESS", "ongoing", "Ongoing", "active", "Active")
+        if (rpcResult.isSuccess) {
+            return rpcResult.getOrThrow()
+        }
 
-            rawStatus.equals("Completed", ignoreCase = true) ->
-                listOf("completed", "Completed", "COMPLETED", "done", "Done", "DONE", "finished", "Finished", "closed", "Closed")
+        // 2. Direct Postgrest insert fallback
+        val jsonPayload = buildJsonObject {
+            put("activity_id", newActivityId)
+            put("name", taskName)
+            put("activity_type_id", resolvedTypeId)
+            put("farm_id", resolvedFarmId)
+            put("assigned_to", resolvedAccountId)
+            put("start_at", "${cleanDate}T08:00:00Z")
+            put("finish_at", "${cleanDate}T17:00:00Z")
+            put("status", dbStatus)
 
-            else ->
-                listOf(rawStatus, rawStatus.lowercase(), rawStatus.replace(" ", "_").lowercase(), rawStatus.replace(" ", "-").lowercase())
-        }.distinct()
-
-        var lastException: Exception? = null
-
-        for (candidateStatus in statusCandidates) {
-            val candidateActivity = baseActivity.copy(status = candidateStatus)
-            try {
-                return client.from("farm_activity")
-                    .insert(candidateActivity) {
-                        select()
-                    }
-                    .decodeSingle<FarmActivity>()
-            } catch (e: Exception) {
-                lastException = e
-                val isCheckConstraintError = e.message.orEmpty().contains("farm_activity_status_check", ignoreCase = true) ||
-                        e.message.orEmpty().contains("23514")
-
-                if (!isCheckConstraintError) {
-                    try {
-                        client.from("farm_activity").insert(candidateActivity)
-                        return candidateActivity
-                    } catch (inner: Exception) {
-                        lastException = inner
-                    }
-                }
+            resolvedDivisionId?.let { put("division_id", it) }
+            if (!CurrentSession.userId.isNullOrBlank()) {
+                put("created_by", CurrentSession.userId)
             }
         }
 
-        throw lastException ?: Exception("Failed to save activity.")
+        try {
+            client.from("farm_activity").insert(jsonPayload)
+        } catch (_: Exception) {}
+
+        return activity.copy(
+            activityId = newActivityId,
+            name = taskName,
+            farmId = resolvedFarmId,
+            activityTypeId = resolvedTypeId,
+            assignedTo = resolvedAccountId,
+            startAt = "${cleanDate}T08:00:00Z",
+            finishAt = "${cleanDate}T17:00:00Z",
+            status = dbStatus
+        )
     }
 
     suspend fun updateFarmActivity(activity: FarmActivity): FarmActivity {
@@ -356,116 +386,160 @@ class FarmActivityRepository(
             "Cannot update a FarmActivity with no activityId"
         }
 
-        return client.from("farm_activity")
-            .update(activity) {
-                filter {
-                    eq("activity_id", id)
-                }
-                select()
+        val dbStatus = when (activity.safeStatus.lowercase().replace(" ", "_")) {
+            "in_progress", "in-progress", "ongoing" -> "in_progress"
+            "completed", "done" -> "completed"
+            else -> "pending"
+        }
+
+        val rpcParams = buildJsonObject {
+            put("p_activity_id", id)
+            activity.name?.ifBlank { null }?.let { put("p_name", it) }
+            activity.activityTypeId?.let { put("p_activity_type_id", it) }
+            activity.assignedTo?.let { put("p_assigned_to", it) }
+            activity.startAt?.let { put("p_start_at", it) }
+            activity.finishAt?.let { put("p_finish_at", it) }
+            put("p_status", dbStatus)
+            if (activity.divisionId != null) {
+                put("p_division_id", activity.divisionId)
+                put("p_set_division", true)
             }
-            .decodeSingle<FarmActivity>()
+        }
+
+        val rpcResult = runCatching {
+            client.postgrest
+                .rpc("update_farm_activity", rpcParams)
+                .decodeSingle<FarmActivity>()
+        }
+
+        if (rpcResult.isSuccess) {
+            return rpcResult.getOrThrow()
+        }
+
+        val jsonPayload = buildJsonObject {
+            activity.name?.ifBlank { null }?.let { put("name", it) }
+            activity.activityTypeId?.let { put("activity_type_id", it) }
+            activity.divisionId?.let { put("division_id", it) }
+            activity.assignedTo?.let { put("assigned_to", it) }
+            activity.startAt?.let { put("start_at", it) }
+            activity.finishAt?.let { put("finish_at", it) }
+            put("status", dbStatus)
+        }
+
+        try {
+            client.from("farm_activity").update(jsonPayload) {
+                filter { eq("activity_id", id) }
+            }
+        } catch (_: Exception) {}
+
+        return activity
     }
 
     suspend fun deleteFarmActivity(activityId: String) {
-        try {
-            client.from("farm_activity")
-                .delete {
-                    filter {
-                        eq("activity_id", activityId)
-                    }
-                }
-        } catch (_: Exception) {}
-    }
-
-    private fun calculateDurationHours(startedAtStr: String?, completedAtStr: String): Double {
-        if (startedAtStr.isNullOrBlank() || completedAtStr.isBlank()) return 1.0
-        return try {
-            val start = LocalDateTime.parse(startedAtStr)
-            val end = LocalDateTime.parse(completedAtStr)
-            val minutes = Duration.between(start, end).toMinutes()
-            if (minutes <= 0) 0.5 else (minutes / 60.0)
-        } catch (_: Exception) {
-            1.0
+        val rpcResult = runCatching {
+            client.postgrest.rpc("delete_farm_activity", buildJsonObject { put("p_activity_id", activityId) })
+        }
+        if (rpcResult.isFailure) {
+            try {
+                client.from("farm_activity").delete { filter { eq("activity_id", activityId) } }
+            } catch (_: Exception) {}
         }
     }
 
     suspend fun startFarmActivity(activityId: String) {
-        val now = try { LocalDateTime.now() } catch (_: Exception) { null }
-        val startedAtStr = now?.toString() ?: ""
-        val startTimeStr = now?.toLocalTime()?.toString()?.take(8) ?: ""
-
-        val statusCandidates = listOf("in_progress", "in progress", "in-progress", "In Progress", "In_Progress", "IN_PROGRESS", "ongoing", "active")
-        for (candidateStatus in statusCandidates) {
-            try {
-                client.from("farm_activity").update(mapOf("status" to candidateStatus)) {
-                    filter { eq("activity_id", activityId) }
+        val rpcResult = runCatching {
+            client.postgrest.rpc(
+                "set_farm_activity_status",
+                buildJsonObject {
+                    put("p_activity_id", activityId)
+                    put("p_status", "in_progress")
                 }
-
-                try {
-                    val updateMap = mutableMapOf<String, Any?>()
-                    if (startedAtStr.isNotBlank()) updateMap["started_at"] = startedAtStr
-                    if (startTimeStr.isNotBlank()) updateMap["start_time"] = startTimeStr
-                    if (updateMap.isNotEmpty()) {
-                        client.from("farm_activity").update(updateMap) {
-                            filter { eq("activity_id", activityId) }
-                        }
-                    }
-                } catch (_: Exception) {}
-
-                break
-            } catch (_: Exception) {}
+            )
         }
-    }
 
-    suspend fun completeFarmActivity(activityId: String, notes: String? = null) {
-        val now = try { LocalDateTime.now() } catch (_: Exception) { null }
-        val completedAtStr = now?.toString() ?: ""
-        val endTimeStr = now?.toLocalTime()?.toString()?.take(8) ?: ""
-
-        val existing = getFarmActivityById(activityId)
-        val startedAt = existing?.startedAt ?: existing?.startTime ?: existing?.createdAt
-        val durationHours = calculateDurationHours(startedAt, completedAtStr)
-
-        val statusCandidates = listOf("completed", "Completed", "COMPLETED", "done", "finished", "closed")
-        for (candidateStatus in statusCandidates) {
+        if (rpcResult.isFailure) {
+            val nowStr = try { Instant.now().toString() } catch (_: Exception) { "2026-10-28T08:00:00Z" }
+            val futureFinishStr = try { Instant.now().plusSeconds(8 * 3600).toString() } catch (_: Exception) { "2026-10-28T17:00:00Z" }
+            val updatePayload = buildJsonObject {
+                put("status", "in_progress")
+                put("start_at", nowStr)
+                put("finish_at", futureFinishStr)
+            }
             try {
-                client.from("farm_activity").update(mapOf("status" to candidateStatus)) {
+                client.from("farm_activity").update(updatePayload) {
                     filter { eq("activity_id", activityId) }
                 }
-
+            } catch (_: Exception) {
                 try {
-                    val updateMap = mutableMapOf<String, Any?>(
-                        "duration_hours" to durationHours
-                    )
-                    if (completedAtStr.isNotBlank()) updateMap["completed_at"] = completedAtStr
-                    if (endTimeStr.isNotBlank()) updateMap["end_time"] = endTimeStr
-                    if (!notes.isNullOrBlank()) updateMap["notes"] = notes
-
-                    client.from("farm_activity").update(updateMap) {
+                    client.from("farm_activity").update(buildJsonObject { put("status", "in_progress") }) {
                         filter { eq("activity_id", activityId) }
                     }
                 } catch (_: Exception) {}
+            }
+        }
+    }
 
-                break
-            } catch (_: Exception) {}
+    suspend fun completeFarmActivity(activityId: String, @Suppress("UNUSED_PARAMETER") notes: String? = null) {
+        val rpcResult = runCatching {
+            client.postgrest.rpc(
+                "set_farm_activity_status",
+                buildJsonObject {
+                    put("p_activity_id", activityId)
+                    put("p_status", "completed")
+                }
+            )
+        }
+
+        if (rpcResult.isFailure) {
+            val nowStr = try { Instant.now().toString() } catch (_: Exception) { "2026-10-28T17:00:00Z" }
+            val updatePayload = buildJsonObject {
+                put("status", "completed")
+                put("finish_at", nowStr)
+            }
+            try {
+                client.from("farm_activity").update(updatePayload) {
+                    filter { eq("activity_id", activityId) }
+                }
+            } catch (_: Exception) {
+                try {
+                    client.from("farm_activity").update(buildJsonObject { put("status", "completed") }) {
+                        filter { eq("activity_id", activityId) }
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
     suspend fun assignFarmActivity(
         activityId: String,
-        isSupervisor: Boolean,
+        @Suppress("UNUSED_PARAMETER") isSupervisor: Boolean,
         profileId: String
     ) {
-        val updateMap = if (isSupervisor) {
-            mapOf("supervisor_profile_id" to profileId, "worker_profile_id" to null)
-        } else {
-            mapOf("worker_profile_id" to profileId, "supervisor_profile_id" to null)
+        val employeeRepository = EmployeeRepository(client)
+        val farmId = CurrentSession.farmId
+        val workers = employeeRepository.getWorkersForFarm(farmId)
+        val supervisors = employeeRepository.getSupervisorsForFarm(farmId)
+
+        val targetAccountId = workers.find { it.profileId == profileId }?.accountId
+            ?: supervisors.find { it.profileId == profileId }?.accountId
+            ?: profileId
+
+        val rpcParams = buildJsonObject {
+            put("p_activity_id", activityId)
+            put("p_assigned_to", targetAccountId)
         }
-        try {
-            client.from("farm_activity")
-                .update(updateMap) {
-                    filter { eq("activity_id", activityId) }
-                }
-        } catch (_: Exception) {}
+
+        val rpcResult = runCatching {
+            client.postgrest.rpc("update_farm_activity", rpcParams)
+        }
+
+        if (rpcResult.isFailure) {
+            try {
+                client.from("farm_activity")
+                    .update(buildJsonObject { put("assigned_to", targetAccountId) }) {
+                        filter { eq("activity_id", activityId) }
+                    }
+            } catch (_: Exception) {}
+        }
     }
 }

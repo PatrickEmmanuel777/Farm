@@ -153,7 +153,7 @@ class FarmActivitiesViewModel(
                     workerProfileId = workerProfileId,
                     supervisorProfileId = supervisorProfileId,
                     activityDate = activityDate,
-                    status = if (status.isBlank()) "Pending" else status,
+                    status = status.ifBlank { "Pending" },
                     method = if (workerProfileId != null || supervisorProfileId != null) null else "Role: $assignedRole",
                     notes = notes,
                     quantity = quantity,
@@ -235,6 +235,16 @@ class FarmActivitiesViewModel(
 
     fun startActivity(activityId: String) {
         viewModelScope.launch {
+            val currentState = _uiState.value
+            if (currentState is FarmActivitiesUiState.Success) {
+                val updatedList = currentState.activities.map { display ->
+                    if (display.activity.activityId == activityId) {
+                        display.copy(activity = display.activity.copy(status = "in_progress"))
+                    } else display
+                }
+                _uiState.value = FarmActivitiesUiState.Success(updatedList)
+            }
+
             try {
                 activityRepository.startFarmActivity(activityId)
                 loadActivities()
@@ -246,6 +256,16 @@ class FarmActivitiesViewModel(
 
     fun completeActivity(activityId: String, notes: String? = null) {
         viewModelScope.launch {
+            val currentState = _uiState.value
+            if (currentState is FarmActivitiesUiState.Success) {
+                val updatedList = currentState.activities.map { display ->
+                    if (display.activity.activityId == activityId) {
+                        display.copy(activity = display.activity.copy(status = "completed"))
+                    } else display
+                }
+                _uiState.value = FarmActivitiesUiState.Success(updatedList)
+            }
+
             try {
                 activityRepository.completeFarmActivity(activityId, notes)
                 loadActivities()

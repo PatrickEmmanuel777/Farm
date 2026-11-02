@@ -3,12 +3,9 @@ package com.example.farmproject.ui.navigation.supervisor
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.PrecisionManufacturing
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -16,10 +13,10 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,20 +36,26 @@ import com.example.farmproject.ui.activities.manager.FarmActivitiesUiState
 import com.example.farmproject.ui.activities.manager.FarmActivitiesViewModel
 import com.example.farmproject.ui.activities.manager.ManagerAddFarmActivityScreen
 import com.example.farmproject.ui.activities.manager.ManagerEditFarmActivityScreen
-import com.example.farmproject.ui.activities.manager.ManagerFarmActivitiesScreen
 import com.example.farmproject.ui.activities.manager.ManagerFarmActivityDetailsScreen
 import com.example.farmproject.ui.activities.supervisor.SupervisorFarmActivitiesScreen
+import com.example.farmproject.ui.attendance.AttendanceViewModel
+import com.example.farmproject.ui.attendance.supervisor.SupervisorAttendanceLogScreen
 import com.example.farmproject.ui.attendance.supervisor.SupervisorAttendanceScreen
+import com.example.farmproject.ui.attendance.supervisor.SupervisorReviewClockRequestsScreen
 import com.example.farmproject.ui.chat.ChatRoutes
 import com.example.farmproject.ui.chat.chatGraph
 import com.example.farmproject.ui.dashboard.supervisor.SupervisorDashboardScreen
+import com.example.farmproject.ui.dashboard.supervisor.SupervisorDashboardViewModel
+import com.example.farmproject.ui.expense.ManagerExpenseScreen
 import com.example.farmproject.ui.inventory.manager.InventoryUiState
 import com.example.farmproject.ui.inventory.manager.InventoryViewModel
 import com.example.farmproject.ui.inventory.manager.ManagerAddInventoryScreen
 import com.example.farmproject.ui.inventory.manager.ManagerInventoryCategoryItemsScreen
 import com.example.farmproject.ui.inventory.manager.ManagerInventoryDetailsScreen
 import com.example.farmproject.ui.inventory.manager.ManagerInventoryScreen
-import com.example.farmproject.ui.machinery.manager.MachineryDetailUiState
+import com.example.farmproject.ui.machinery.manager.MachineryInUseViewModel
+import com.example.farmproject.ui.machinery.manager.MachineryMaintenanceViewModel
+import com.example.farmproject.ui.machinery.manager.MachineryUiState
 import com.example.farmproject.ui.machinery.manager.MachineryViewModel
 import com.example.farmproject.ui.machinery.manager.ManagerAddMachineryScreen
 import com.example.farmproject.ui.machinery.manager.ManagerMachineryDetailsScreen
@@ -60,7 +63,6 @@ import com.example.farmproject.ui.machinery.manager.ManagerMachineryInUseScreen
 import com.example.farmproject.ui.machinery.manager.ManagerMachineryMaintenanceScreen
 import com.example.farmproject.ui.machinery.manager.ManagerMachineryScreen
 import com.example.farmproject.ui.more.supervisor.SupervisorMoreScreen
-import com.example.farmproject.ui.notifications.manager.ManagerNotificationsScreen
 import com.example.farmproject.ui.notifications.manager.NotificationViewModel
 import com.example.farmproject.ui.notifications.supervisor.SupervisorNotificationsScreen
 import com.example.farmproject.ui.settings.supervisor.SupervisorProfileScreen
@@ -104,6 +106,7 @@ private object SupervisorRoutes {
     const val ACTIVITIES = "supervisor_tab_activities"
     const val INVENTORY = "supervisor_tab_inventory"
     const val MACHINERY = "supervisor_tab_machinery"
+    const val EXPENSES = "supervisor_expenses"
     const val ADD_FARM_ACTIVITY = "supervisor_add_farm_activity"
     const val EDIT_FARM_ACTIVITY = "supervisor_edit_farm_activity/{activityId}"
     const val FARM_ACTIVITY_DETAILS = "supervisor_farm_activity_details/{activityId}"
@@ -114,6 +117,8 @@ private object SupervisorRoutes {
     const val MACHINERY_IN_USE = "supervisor_machinery_in_use"
     const val MACHINERY_MAINTENANCE = "supervisor_machinery_maintenance"
     const val ATTENDANCE = "supervisor_attendance"
+    const val REVIEW_CLOCK_REQUESTS = "supervisor_review_clock_requests"
+    const val ATTENDANCE_LOG = "supervisor_attendance_log"
 }
 
 @Composable
@@ -123,11 +128,7 @@ private inline fun <reified VM : ViewModel> sharedViewModel(
     backStackEntry: NavBackStackEntry
 ): VM {
     val parentEntry = remember(backStackEntry) {
-        try {
-            navController.getBackStackEntry(route)
-        } catch (_: Exception) {
-            backStackEntry
-        }
+        navController.getBackStackEntry(route)
     }
     return viewModel(parentEntry)
 }
@@ -150,29 +151,30 @@ fun SupervisorNavigation(
     val currentRoute = navBackStackEntry?.destination?.route
 
     val formRoutes = setOf(
-        SupervisorRoutes.ADD_INVENTORY,
         SupervisorRoutes.ADD_FARM_ACTIVITY,
-        SupervisorRoutes.EDIT_FARM_ACTIVITY,
-        SupervisorRoutes.ADD_MACHINERY,
         SupervisorRoutes.PROFILE
     )
 
     val isFormScreen = currentRoute in formRoutes || currentRoute?.startsWith("supervisor_add_inventory") == true
 
     fun navigateToTab(route: String) {
+        val startRoute = navController.graph.findStartDestination().route
+        val isStart = route == startRoute
         navController.navigate(route) {
             popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
+                saveState = !isStart
             }
             launchSingleTop = true
-            restoreState = true
+            restoreState = !isStart
         }
     }
 
     Scaffold(
         bottomBar = {
             if (!isFormScreen) {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = Color(0xFFF2F6F1)
+                ) {
                     tabs.forEach { tab ->
                         NavigationBarItem(
                             selected = currentRoute == tab.route,
@@ -200,11 +202,34 @@ fun SupervisorNavigation(
             // 1. DASHBOARD
             composable(SupervisorTab.Dashboard.route) {
                 SupervisorDashboardScreen(
-                    onActivitiesClick = { navController.navigate(SupervisorRoutes.ACTIVITIES) },
-                    onInventoryClick = { navController.navigate(SupervisorRoutes.INVENTORY) },
-                    onMachineryClick = { navController.navigate(SupervisorRoutes.MACHINERY) },
-                    onAttendanceClick = { navController.navigate(SupervisorRoutes.ATTENDANCE) },
-                    onLogoutClick = onLogout
+                    onReviewRequestsClick = { navController.navigate(SupervisorRoutes.REVIEW_CLOCK_REQUESTS) },
+                    onAttendanceLogClick = { navController.navigate(SupervisorRoutes.ATTENDANCE_LOG) },
+                    onChatClick = { navigateToTab(SupervisorTab.Messages.route) }
+                )
+            }
+
+            // REVIEW CLOCK REQUESTS
+            composable(SupervisorRoutes.REVIEW_CLOCK_REQUESTS) {
+                val viewModel: SupervisorDashboardViewModel = viewModel()
+                SupervisorReviewClockRequestsScreen(
+                    viewModel = viewModel,
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            // ATTENDANCE LOG
+            composable(SupervisorRoutes.ATTENDANCE_LOG) {
+                val viewModel: AttendanceViewModel = viewModel()
+                SupervisorAttendanceLogScreen(
+                    viewModel = viewModel,
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            // EXPENSES (FOR EXPENSE SUPERVISOR)
+            composable(SupervisorRoutes.EXPENSES) {
+                ManagerExpenseScreen(
+                    onBackClick = { navController.popBackStack() }
                 )
             }
 
@@ -213,7 +238,11 @@ fun SupervisorNavigation(
                 val viewModel: FarmActivitiesViewModel = viewModel()
                 SupervisorFarmActivitiesScreen(
                     viewModel = viewModel,
-                    onBackClick = { navigateToTab(SupervisorTab.Dashboard.route) },
+                    onBackClick = {
+                        if (!navController.popBackStack()) {
+                            navigateToTab(SupervisorTab.Dashboard.route)
+                        }
+                    },
                     onActivityClick = { activityId ->
                         navController.navigate("supervisor_farm_activity_details/$activityId")
                     }
@@ -226,6 +255,7 @@ fun SupervisorNavigation(
                     route = SupervisorRoutes.ACTIVITIES,
                     backStackEntry = backStackEntry
                 )
+
                 val formOptions by viewModel.formOptions.collectAsStateWithLifecycle()
 
                 ManagerAddFarmActivityScreen(
@@ -242,6 +272,47 @@ fun SupervisorNavigation(
                             activityName = activityName,
                             activityDate = dueDate,
                             status = "Pending",
+                            notes = notes,
+                            assignedRole = assignedRole,
+                            workerProfileId = workerProfileId,
+                            supervisorProfileId = supervisorProfileId,
+                            divisionId = divisionId,
+                            quantity = quantity,
+                            quantityUnit = quantityUnit,
+                            equipmentNeeded = equipmentNeeded
+                        )
+                    }
+                )
+            }
+
+            composable(
+                route = SupervisorRoutes.EDIT_FARM_ACTIVITY,
+                arguments = listOf(navArgument("activityId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val activityId = backStackEntry.arguments?.getString("activityId").orEmpty()
+                val viewModel: FarmActivitiesViewModel = sharedViewModel(
+                    navController = navController,
+                    route = SupervisorRoutes.ACTIVITIES,
+                    backStackEntry = backStackEntry
+                )
+
+                val formOptions by viewModel.formOptions.collectAsStateWithLifecycle()
+
+                ManagerEditFarmActivityScreen(
+                    viewModel = viewModel,
+                    activityId = activityId,
+                    activityTypes = formOptions.activityTypeNames,
+                    divisions = formOptions.divisions,
+                    machineryList = formOptions.machinery,
+                    workers = formOptions.workers,
+                    supervisors = formOptions.supervisors,
+                    onBackClick = { navController.popBackStack() },
+                    onSaveClick = { activityTypeName, activityName, dueDate, notes, assignedRole, workerProfileId, supervisorProfileId, divisionId, quantity, quantityUnit, equipmentNeeded ->
+                        viewModel.updateActivity(
+                            activityId = activityId,
+                            activityTypeName = activityTypeName,
+                            activityName = activityName,
+                            activityDate = dueDate,
                             notes = notes,
                             assignedRole = assignedRole,
                             workerProfileId = workerProfileId,
@@ -285,7 +356,7 @@ fun SupervisorNavigation(
                 ManagerFarmActivityDetailsScreen(
                     title = display?.displayTitle ?: "Unknown activity",
                     type = display?.activityTypeName ?: "",
-                    assignedTo = display?.assignedToName ?: "Unassigned",
+                    assignedTo = display?.assignedToName ?: "Worker",
                     dueDate = display?.activity?.safeActivityDate ?: "",
                     durationText = durationText,
                     status = status,
@@ -296,11 +367,16 @@ fun SupervisorNavigation(
                     equipmentNeeded = display?.activity?.equipmentNeeded,
                     workers = formOptions.workers,
                     supervisors = formOptions.supervisors,
+                    isManagerRole = true,
                     onBackClick = { navController.popBackStack() },
                     onStartClick = { viewModel.startActivity(activityId) },
                     onCompleteClick = { viewModel.completeActivity(activityId) },
-                    onAssignSave = { isSupervisor, profileId -> viewModel.assignActivity(activityId, isSupervisor, profileId) },
-                    onEditClick = { navController.navigate("supervisor_edit_farm_activity/$activityId") },
+                    onAssignSave = { isSupervisor, profileId ->
+                        viewModel.assignActivity(activityId, isSupervisor, profileId)
+                    },
+                    onEditClick = {
+                        navController.navigate("supervisor_edit_farm_activity/$activityId")
+                    },
                     onDeleteClick = {
                         viewModel.deleteActivity(activityId)
                         navController.popBackStack()
@@ -308,65 +384,14 @@ fun SupervisorNavigation(
                 )
             }
 
-            composable(
-                route = SupervisorRoutes.EDIT_FARM_ACTIVITY,
-                arguments = listOf(navArgument("activityId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val activityId = backStackEntry.arguments?.getString("activityId").orEmpty()
-                val viewModel: FarmActivitiesViewModel = sharedViewModel(
+            // 3. INVENTORY
+            composable(SupervisorRoutes.INVENTORY) { backStackEntry ->
+                val viewModel: InventoryViewModel = sharedViewModel(
                     navController = navController,
-                    route = SupervisorRoutes.ACTIVITIES,
+                    route = SupervisorRoutes.INVENTORY,
                     backStackEntry = backStackEntry
                 )
 
-                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-                val formOptions by viewModel.formOptions.collectAsStateWithLifecycle()
-
-                val display = (uiState as? FarmActivitiesUiState.Success)?.activities
-                    ?.find { it.activity.activityId == activityId }
-
-                ManagerEditFarmActivityScreen(
-                    activityId = activityId,
-                    initialType = display?.activityTypeName.orEmpty(),
-                    initialName = display?.activity?.activityName.orEmpty(),
-                    initialDueDate = display?.activity?.safeActivityDate.orEmpty(),
-                    initialNotes = display?.activity?.notes.orEmpty(),
-                    initialRole = display?.assignedToName.orEmpty(),
-                    initialWorkerProfileId = display?.activity?.workerProfileId,
-                    initialSupervisorProfileId = display?.activity?.supervisorProfileId,
-                    initialDivisionId = display?.activity?.divisionId,
-                    initialQuantity = display?.activity?.quantity,
-                    initialQuantityUnit = display?.activity?.quantityUnit,
-                    initialEquipmentNeeded = display?.activity?.equipmentNeeded,
-                    viewModel = viewModel,
-                    activityTypes = formOptions.activityTypeNames,
-                    divisions = formOptions.divisions,
-                    machineryList = formOptions.machinery,
-                    workers = formOptions.workers,
-                    supervisors = formOptions.supervisors,
-                    onBackClick = { navController.popBackStack() },
-                    onSaveClick = { activityTypeName, activityName, dueDate, notes, assignedRole, workerProfileId, supervisorProfileId, divisionId, quantity, quantityUnit, equipmentNeeded ->
-                        viewModel.updateActivity(
-                            activityId = activityId,
-                            activityTypeName = activityTypeName,
-                            activityName = activityName,
-                            activityDate = dueDate,
-                            notes = notes,
-                            assignedRole = assignedRole,
-                            workerProfileId = workerProfileId,
-                            supervisorProfileId = supervisorProfileId,
-                            divisionId = divisionId,
-                            quantity = quantity,
-                            quantityUnit = quantityUnit,
-                            equipmentNeeded = equipmentNeeded
-                        )
-                    }
-                )
-            }
-
-            // 3. INVENTORY
-            composable(SupervisorRoutes.INVENTORY) {
-                val viewModel: InventoryViewModel = viewModel()
                 ManagerInventoryScreen(
                     viewModel = viewModel,
                     onBackClick = { navigateToTab(SupervisorTab.Dashboard.route) },
@@ -380,8 +405,9 @@ fun SupervisorNavigation(
                 route = "supervisor_inventory_category/{categoryName}",
                 arguments = listOf(navArgument("categoryName") { type = NavType.StringType })
             ) { backStackEntry ->
-                val categoryName = backStackEntry.arguments?.getString("categoryName").orEmpty()
-                val category = InventoryCategory.entries.find { it.name == categoryName } ?: InventoryCategory.FERTILIZER
+                val categoryNameStr = backStackEntry.arguments?.getString("categoryName").orEmpty()
+                val category = runCatching { InventoryCategory.valueOf(categoryNameStr) }.getOrDefault(InventoryCategory.FERTILIZER)
+
                 val viewModel: InventoryViewModel = sharedViewModel(
                     navController = navController,
                     route = SupervisorRoutes.INVENTORY,
@@ -389,31 +415,14 @@ fun SupervisorNavigation(
                 )
 
                 ManagerInventoryCategoryItemsScreen(
-                    category = category,
                     viewModel = viewModel,
+                    category = category,
                     onBackClick = { navController.popBackStack() },
-                    onAddClick = { navController.navigate("supervisor_add_inventory?category=${category.name}") },
-                    onItemClick = { itemId -> navController.navigate("supervisor_inventory_details/$itemId") }
-                )
-            }
-
-            composable(
-                route = "supervisor_add_inventory?category={categoryName}",
-                arguments = listOf(navArgument("categoryName") { type = NavType.StringType; nullable = true; defaultValue = "Fertilizer" })
-            ) { backStackEntry ->
-                val categoryName = backStackEntry.arguments?.getString("categoryName") ?: "Fertilizer"
-                val viewModel: InventoryViewModel = sharedViewModel(
-                    navController = navController,
-                    route = SupervisorRoutes.INVENTORY,
-                    backStackEntry = backStackEntry
-                )
-
-                ManagerAddInventoryScreen(
-                    initialCategory = categoryName,
-                    onBackClick = { navController.popBackStack() },
-                    onSaveClick = { category, name, subtype, quantity, unit, reorderLevel, description ->
-                        viewModel.addInventoryItem(category, name, subtype, quantity, unit, reorderLevel, description)
-                        navController.popBackStack()
+                    onItemClick = { itemId ->
+                        navController.navigate("supervisor_inventory_details/$itemId")
+                    },
+                    onAddClick = {
+                        navController.navigate("supervisor_add_inventory")
                     }
                 )
             }
@@ -433,29 +442,49 @@ fun SupervisorNavigation(
                 val item = (uiState as? InventoryUiState.Success)?.items?.find { it.id == itemId }
 
                 ManagerInventoryDetailsScreen(
-                    itemName = item?.name ?: "Unknown item",
-                    category = item?.category?.displayName ?: "",
-                    quantity = item?.quantity?.toString() ?: "0",
-                    unit = item?.unit ?: "",
-                    reorderLevel = item?.reorderLevel?.toString() ?: "Not set",
-                    isLowStock = item?.isLowStock ?: false,
-                    notes = item?.description ?: "No additional notes recorded for this item.",
+                    itemName = item?.name ?: "Inventory Item",
+                    category = item?.category?.displayName ?: "General",
+                    quantity = "${item?.quantity ?: 0.0}",
+                    unit = item?.unit ?: "units",
+                    reorderLevel = "${item?.reorderLevel ?: 10.0}",
+                    isLowStock = item?.isLowStock == true,
+                    notes = item?.description ?: "No notes recorded.",
                     onBackClick = { navController.popBackStack() },
-                    onDeleteClick = {
-                        item?.let { viewModel.deleteInventoryItem(it.category, it.id) }
-                        navController.popBackStack()
-                    }
+                    onEditClick = {},
+                    onDeleteClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = SupervisorRoutes.ADD_INVENTORY,
+                arguments = listOf(navArgument("category") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                })
+            ) { backStackEntry ->
+                val categoryStr = backStackEntry.arguments?.getString("category").orEmpty().ifBlank { "Fertilizer" }
+
+                ManagerAddInventoryScreen(
+                    initialCategory = categoryStr,
+                    onBackClick = { navController.popBackStack() }
                 )
             }
 
             // 4. MACHINERY
-            composable(SupervisorRoutes.MACHINERY) {
-                val viewModel: MachineryViewModel = viewModel()
+            composable(SupervisorRoutes.MACHINERY) { backStackEntry ->
+                val viewModel: MachineryViewModel = sharedViewModel(
+                    navController = navController,
+                    route = SupervisorRoutes.MACHINERY,
+                    backStackEntry = backStackEntry
+                )
+
                 ManagerMachineryScreen(
                     viewModel = viewModel,
                     onBackClick = { navigateToTab(SupervisorTab.Dashboard.route) },
-                    onMachineryClick = { machineryId -> navController.navigate("supervisor_machinery_details/$machineryId") },
-                    onAddMachineryClick = { navController.navigate(SupervisorRoutes.ADD_MACHINERY) }
+                    onMachineryClick = { id ->
+                        navController.navigate("supervisor_machinery_details/$id")
+                    }
                 )
             }
 
@@ -470,41 +499,15 @@ fun SupervisorNavigation(
                     backStackEntry = backStackEntry
                 )
 
-                LaunchedEffect(machineryId) { viewModel.loadMachineryDetail(machineryId) }
-
-                val detailState by viewModel.detailState.collectAsStateWithLifecycle()
-                val success = detailState as? MachineryDetailUiState.Success
-
-                val purchaseCostFormatted = success?.machinery?.purchaseCost?.let {
-                    String.format(Locale.US, "KES %,.2f", it)
-                } ?: ""
+                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+                val item = (uiState as? MachineryUiState.Success)?.machinery?.find { it.machineryId == machineryId }
 
                 ManagerMachineryDetailsScreen(
-                    machineName = success?.machinery?.name ?: "Loading...",
-                    machineType = success?.machinery?.machineryType ?: "",
-                    status = success?.machinery?.status ?: "",
-                    condition = success?.machinery?.condition ?: "",
-                    location = success?.machinery?.location ?: "Not set",
-                    purchaseDate = success?.machinery?.purchaseDate.orEmpty(),
-                    purchaseCost = purchaseCostFormatted,
-                    rawPurchaseCost = success?.machinery?.purchaseCost?.toString().orEmpty(),
-                    totalHoursUsed = success?.let { "${it.totalHoursUsed} hrs" } ?: "0 hrs",
-                    totalFuelUsed = success?.let { "${it.totalFuelUsed} litres" } ?: "0 litres",
-                    lastMaintenance = success?.lastMaintenanceDate ?: "No maintenance recorded",
-                    nextMaintenance = success?.nextMaintenanceDate ?: "Not scheduled",
-                    onBackClick = { navController.popBackStack() },
-                    onEditSave = { name, purchaseDate, purchaseCost ->
-                        viewModel.updateMachineryDetails(machineryId, name, purchaseDate, purchaseCost)
-                    },
-                    onDeleteClick = {
-                        viewModel.deleteMachinery(machineryId)
-                        navController.popBackStack()
-                    },
-                    onUsageHistoryClick = { navController.navigate(SupervisorRoutes.MACHINERY_IN_USE) },
-                    onMaintenanceHistoryClick = { navController.navigate(SupervisorRoutes.MACHINERY_MAINTENANCE) },
-                    onRecordUsageSave = { hrs, fuel, date, notes ->
-                        viewModel.recordUsage(machineryId, hrs, fuel, date, notes)
-                    }
+                    machineName = item?.name ?: "Machinery",
+                    machineType = item?.machineryType ?: "Equipment",
+                    status = item?.status ?: "Available",
+                    condition = item?.condition ?: "Good",
+                    onBackClick = { navController.popBackStack() }
                 )
             }
 
@@ -517,48 +520,68 @@ fun SupervisorNavigation(
 
                 ManagerAddMachineryScreen(
                     viewModel = viewModel,
-                    onBackClick = { navController.popBackStack() },
-                    onSaveClick = { name, machineryType, model, serialNumber, purchaseDate, condition ->
-                        viewModel.addMachinery(name, machineryType, model, serialNumber, purchaseDate, condition)
-                    }
+                    onBackClick = { navController.popBackStack() }
                 )
             }
 
-            composable(SupervisorRoutes.MACHINERY_IN_USE) {
+            composable(SupervisorRoutes.MACHINERY_IN_USE) { backStackEntry ->
+                val viewModel: MachineryInUseViewModel = sharedViewModel(
+                    navController = navController,
+                    route = SupervisorRoutes.MACHINERY,
+                    backStackEntry = backStackEntry
+                )
+
                 ManagerMachineryInUseScreen(
+                    viewModel = viewModel,
                     onBackClick = { navController.popBackStack() }
                 )
             }
 
-            composable(SupervisorRoutes.MACHINERY_MAINTENANCE) {
+            composable(SupervisorRoutes.MACHINERY_MAINTENANCE) { backStackEntry ->
+                val viewModel: MachineryMaintenanceViewModel = sharedViewModel(
+                    navController = navController,
+                    route = SupervisorRoutes.MACHINERY,
+                    backStackEntry = backStackEntry
+                )
+
                 ManagerMachineryMaintenanceScreen(
+                    viewModel = viewModel,
                     onBackClick = { navController.popBackStack() }
                 )
             }
 
-            // 5. MORE
+            // 5. ATTENDANCE
+            composable(SupervisorRoutes.ATTENDANCE) {
+                SupervisorAttendanceScreen(
+                    onBackClick = { navigateToTab(SupervisorTab.Dashboard.route) }
+                )
+            }
+
+            // 6. SETTINGS
+            composable(SupervisorRoutes.SETTINGS) {
+                SupervisorSettingsScreen(
+                    onBackClick = {
+                        if (!navController.popBackStack()) {
+                            navigateToTab(SupervisorTab.Dashboard.route)
+                        }
+                    },
+                    onProfileClick = { navController.navigate(SupervisorRoutes.PROFILE) },
+                    onNotificationsClick = { navController.navigate(SupervisorRoutes.NOTIFICATIONS) }
+                )
+            }
+
+            // MORE
             composable(SupervisorTab.More.route) {
                 SupervisorMoreScreen(
                     onBackClick = { navigateToTab(SupervisorTab.Dashboard.route) },
+                    onActivitiesClick = { navController.navigate(SupervisorRoutes.ACTIVITIES) },
+                    onInventoryClick = { navController.navigate(SupervisorRoutes.INVENTORY) },
+                    onMachineryClick = { navController.navigate(SupervisorRoutes.MACHINERY) },
                     onAttendanceClick = { navController.navigate(SupervisorRoutes.ATTENDANCE) },
+                    onExpensesClick = { navController.navigate(SupervisorRoutes.EXPENSES) },
                     onProfileClick = { navController.navigate(SupervisorRoutes.PROFILE) },
                     onSettingsClick = { navController.navigate(SupervisorRoutes.SETTINGS) },
                     onLogoutClick = onLogout
-                )
-            }
-
-            composable(SupervisorRoutes.ATTENDANCE) {
-                SupervisorAttendanceScreen(
-                    onBackClick = { navController.popBackStack() }
-                )
-            }
-
-            // SETTINGS
-            composable(SupervisorRoutes.SETTINGS) {
-                SupervisorSettingsScreen(
-                    onBackClick = { navController.popBackStack() },
-                    onProfileClick = { navController.navigate(SupervisorRoutes.PROFILE) },
-                    onNotificationsClick = { navController.navigate(SupervisorRoutes.NOTIFICATIONS) }
                 )
             }
 

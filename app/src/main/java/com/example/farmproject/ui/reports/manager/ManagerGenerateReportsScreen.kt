@@ -27,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
@@ -65,16 +66,14 @@ fun ManagerGenerateReportScreen(
 
     val reportTypes = listOf(
         "Crop Yield Report",
-        "Inventory Report",
-        "Machinery Report",
-        "Workforce Report",
+        "Resources Report",
+        "Farm Expenses Report",
         "Storage Report"
     )
 
     val formats = listOf(
         "PDF",
-        "Excel",
-        "CSV"
+        "Excel"
     )
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
@@ -157,7 +156,7 @@ fun ManagerGenerateReportScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Category") },
                     placeholder = { Text("Select report type") },
                     leadingIcon = {
@@ -246,7 +245,7 @@ fun ManagerGenerateReportScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Format") },
                     placeholder = { Text("Select format") },
                     leadingIcon = {

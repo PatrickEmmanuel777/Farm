@@ -2,34 +2,25 @@
 
 package com.example.farmproject.data.repository
 
-import com.example.farmproject.data.model.ActivityCategoryRow
-import com.example.farmproject.data.model.CropYieldRow
+import com.example.farmproject.data.model.CropProductivityRow
+import com.example.farmproject.data.model.CropYieldCards
 import com.example.farmproject.data.model.CropYieldSummary
-import com.example.farmproject.data.model.DivisionYieldRow
-import com.example.farmproject.data.model.EmployeeRow
-import com.example.farmproject.data.model.ExpiryAlert
+import com.example.farmproject.data.model.ExpenseCategoryBreakdown
+import com.example.farmproject.data.model.ExpenseFilters
+import com.example.farmproject.data.model.ExpenseListRow
+import com.example.farmproject.data.model.ExpenseRow
+import com.example.farmproject.data.model.ExpenseSummary
 import com.example.farmproject.data.model.FacilityRow
-import com.example.farmproject.data.model.FuelRow
-import com.example.farmproject.data.model.GradeRow
-import com.example.farmproject.data.model.HarvestTotal
+import com.example.farmproject.data.model.HarvestRow
 import com.example.farmproject.data.model.InventoryCategoryRow
 import com.example.farmproject.data.model.InventorySummary
-import com.example.farmproject.data.model.MachineUsageRow
-import com.example.farmproject.data.model.MachinerySummary
-import com.example.farmproject.data.model.MaintenanceDueRow
-import com.example.farmproject.data.model.MaintenanceStats
-import com.example.farmproject.data.model.NearExpiryRow
-import com.example.farmproject.data.model.PlantingRow
 import com.example.farmproject.data.model.ProduceByCropRow
-import com.example.farmproject.data.model.ReorderAlert
 import com.example.farmproject.data.model.ReportCategoryStatus
 import com.example.farmproject.data.model.ReportJson
 import com.example.farmproject.data.model.ReportRecord
-import com.example.farmproject.data.model.StatusCount
+import com.example.farmproject.data.model.ReportSummary
 import com.example.farmproject.data.model.StorageSummary
-import com.example.farmproject.data.model.WorkforceSummary
 import com.example.farmproject.data.remote.SupabaseClientProvider
-
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
@@ -38,6 +29,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import java.util.Locale
 
 /**
  * Data access for the Reports screen.
@@ -70,7 +62,21 @@ class ReportRepository(private val supabase: SupabaseClient = SupabaseClientProv
             },
         ).decodeAs<ReportRecord>()
     }.getOrElse {
-        createReportRecordModel(farmId, categoryCode, periodStart, periodEnd)
+        val summaryModel = fetchLiveSummary(farmId, categoryCode)
+        val summaryJson = summaryModel?.let { encodeSummaryToJson(it) } ?: buildJsonObject {}
+
+        ReportRecord(
+            reportId = "rep-$categoryCode",
+            farmId = farmId,
+            categoryId = "cat-$categoryCode",
+            generatedBy = "Manager",
+            periodStart = periodStart,
+            periodEnd = periodEnd,
+            status = "completed",
+            summary = summaryJson,
+            fileUrl = null,
+            generatedAt = "2026-09-12T10:00:00Z"
+        )
     }
 
     suspend fun getReport(reportId: String): ReportRecord = runCatching {
@@ -80,12 +86,200 @@ class ReportRepository(private val supabase: SupabaseClient = SupabaseClientProv
     }.getOrElse {
         val code = when {
             reportId.contains("inventory", ignoreCase = true) -> "inventory"
-            reportId.contains("machinery", ignoreCase = true) -> "machinery"
-            reportId.contains("workforce", ignoreCase = true) -> "workforce"
+            reportId.contains("expense", ignoreCase = true) -> "expenses"
             reportId.contains("storage", ignoreCase = true) -> "storage"
             else -> "crop_yield"
         }
-        createReportRecordModel("", code, null, null)
+        val summaryModel = fetchLiveSummary("", code)
+        val summaryJson = summaryModel?.let { encodeSummaryToJson(it) } ?: buildJsonObject {}
+
+        ReportRecord(
+            reportId = reportId,
+            farmId = "",
+            categoryId = "cat-$code",
+            generatedBy = "Manager",
+            periodStart = null,
+            periodEnd = null,
+            status = "completed",
+            summary = summaryJson,
+            fileUrl = null,
+            generatedAt = "2026-09-12T10:00:00Z"
+        )
+    }
+
+    suspend fun fetchLiveSummary(
+        farmId: String,
+        categoryCode: String
+    ): ReportSummary? {
+        return when (categoryCode.lowercase()) {
+            "crop_yield" -> fetchLiveCropYieldSummary(farmId)
+            "expenses" -> fetchLiveExpenseSummary(farmId)
+            "inventory" -> fetchLiveInventorySummary(farmId)
+            "storage" -> fetchLiveStorageSummary(farmId)
+            else -> null
+        }
+    }
+
+    private suspend fun fetchLiveCropYieldSummary(farmId: String): CropYieldSummary {
+        val harvests = runCatching { CropRepository(supabase).getCropHarvestsForFarm(farmId) }.getOrDefault(emptyList())
+        val plantings = runCatching { CropRepository(supabase).getCropPlantingsForFarm(farmId) }.getOrDefault(emptyList())
+        val storage = runCatching { StorageRepository(supabase).getStorageForFarm(farmId) }.getOrDefault(emptyList())
+
+        val totalHarvestKg = harvests.sumOf { it.harvest.quantityHarvested }
+        val harvestCount = harvests.size
+        val cropsHarvested = harvests.map { it.cropName }.distinct().size
+        val totalAreaAcres = plantings.sumOf { it.planting.areaPlanted ?: 0.0 }
+        val avgYield = if (totalAreaAcres > 0) totalHarvestKg / totalAreaAcres else 0.0
+        val inStorage = storage.sumOf { it.safeQuantityKg }
+        val totalSold = 0.0
+
+        val harvestRows = harvests.map { h ->
+            HarvestRow(
+                harvestId = h.harvest.harvestId,
+                crop = h.cropName,
+                division = h.divisionName,
+                harvestDate = h.harvest.harvestDate,
+                quantity = h.harvest.quantityHarvested,
+                unit = h.harvest.quantityUnit,
+                quantityKg = h.harvest.quantityHarvested,
+                grade = h.harvest.qualityGrade,
+                notes = h.harvest.notes
+            )
+        }
+
+        val cropGrouped = harvests.groupBy { it.cropName }
+        val productivityRows = cropGrouped.map { (cropName, hList) ->
+            val yieldKg = hList.sumOf { it.harvest.quantityHarvested }
+            val cropPlantings = plantings.filter { it.cropName.equals(cropName, ignoreCase = true) }
+            val area = cropPlantings.sumOf { it.planting.areaPlanted ?: 0.0 }.let { if (it > 0) it else 1.0 }
+            CropProductivityRow(
+                crop = cropName,
+                harvests = hList.size,
+                actualYieldKg = yieldKg,
+                areaHarvestedAcres = area,
+                yieldPerAcre = yieldKg / area
+            )
+        }
+
+        return CropYieldSummary(
+            cards = CropYieldCards(
+                totalHarvestKg = totalHarvestKg,
+                avgYieldPerAcre = avgYield,
+                totalSoldKg = totalSold,
+                inStorageKg = inStorage
+            ),
+            harvestCount = harvestCount,
+            totalAreaAcres = totalAreaAcres,
+            cropsHarvested = cropsHarvested,
+            harvests = harvestRows,
+            productivity = productivityRows
+        )
+    }
+
+    private suspend fun fetchLiveExpenseSummary(farmId: String): ExpenseSummary {
+        val page = runCatching { ExpenseRepository(supabase).listExpenses(farmId, ExpenseFilters(limit = 200)) }.getOrNull()?.getOrNull()
+        val expenses: List<ExpenseListRow> = page?.items ?: emptyList()
+        val totalAmount: Double = page?.totalAmount ?: expenses.sumOf { it.amount }
+        val totalCount: Int = page?.totalCount?.toInt() ?: expenses.size
+        val avgExpense = if (totalCount > 0) totalAmount / totalCount else 0.0
+        val largestExpense = expenses.maxOfOrNull { it.amount } ?: 0.0
+
+        val categoryGrouped = expenses.groupBy { it.categoryName }
+        val categoryBreakdown = categoryGrouped.map { (catName: String, eList: List<ExpenseListRow>) ->
+            val catTotal = eList.sumOf { it.amount }
+            val pct = if (totalAmount > 0) (catTotal / totalAmount * 100) else 0.0
+            ExpenseCategoryBreakdown(
+                categoryName = catName,
+                count = eList.size,
+                total = catTotal,
+                percentage = String.format(Locale.US, "%.1f", pct).toDoubleOrNull() ?: 0.0
+            )
+        }.sortedByDescending { it.total }
+
+        val expenseRows = expenses.map { e ->
+            ExpenseRow(
+                expenseId = e.expenseId,
+                description = e.description,
+                category = e.categoryName,
+                amount = e.amount,
+                expenseDate = e.expenseDate,
+                supplierName = e.supplierName,
+                paymentMethod = e.paymentMethod
+            )
+        }
+
+        return ExpenseSummary(
+            totalExpenses = totalAmount,
+            expenseCount = totalCount,
+            averageExpense = avgExpense,
+            largestExpense = largestExpense,
+            byCategory = categoryBreakdown,
+            topExpenses = expenseRows.sortedByDescending { it.amount }.take(5),
+            expenses = expenseRows
+        )
+    }
+
+    private suspend fun fetchLiveInventorySummary(farmId: String): InventorySummary {
+        val items = runCatching { InventoryRepository(supabase).getInventoryForFarm(farmId) }.getOrDefault(emptyList())
+        val lowStock = items.count { it.isLowStock }
+        val outOfStock = items.count { it.quantity <= 0 }
+
+        val categoryGrouped = items.groupBy { it.category.displayName }
+        val byCategoryRows = categoryGrouped.map { (catName, list) ->
+            InventoryCategoryRow(
+                category = catName,
+                items = list.size,
+                lowStock = list.count { it.isLowStock },
+                outOfStock = list.count { it.quantity <= 0 }
+            )
+        }
+
+        return InventorySummary(
+            totalItems = items.size,
+            outOfStockCount = outOfStock,
+            lowStockCount = lowStock,
+            expiringSoonCount = 0,
+            expiredCount = 0,
+            byCategory = byCategoryRows
+        )
+    }
+
+    private suspend fun fetchLiveStorageSummary(farmId: String): StorageSummary {
+        val storageItems = runCatching { StorageRepository(supabase).getStorageForFarm(farmId) }.getOrDefault(emptyList())
+        val totalStoredKg = storageItems.sumOf { it.safeQuantityKg }
+
+        val cropGrouped = storageItems.groupBy { it.cropName }
+        val produceByCropRows = cropGrouped.map { (cropName, list) ->
+            ProduceByCropRow(
+                cropName = cropName,
+                storedKg = list.sumOf { it.safeQuantityKg },
+                lots = list.size
+            )
+        }
+
+        val facilityRows = listOf(
+            FacilityRow(
+                facilityId = "main-store",
+                name = "Main Storage Facility",
+                capacityKg = if (totalStoredKg > 0.0) totalStoredKg * 1.5 else 1000.0,
+                storedKg = totalStoredKg,
+                utilisationPct = if (totalStoredKg > 0) 67.0 else 0.0,
+                condition = "Good"
+            )
+        )
+
+        return StorageSummary(
+            facilities = facilityRows,
+            produceByCrop = produceByCropRows,
+            nearExpiryLots = emptyList()
+        )
+    }
+
+    private fun encodeSummaryToJson(summary: ReportSummary): JsonObject = when (summary) {
+        is CropYieldSummary -> ReportJson.encodeToJsonElement(CropYieldSummary.serializer(), summary).jsonObject
+        is InventorySummary -> ReportJson.encodeToJsonElement(InventorySummary.serializer(), summary).jsonObject
+        is ExpenseSummary -> ReportJson.encodeToJsonElement(ExpenseSummary.serializer(), summary).jsonObject
+        is StorageSummary -> ReportJson.encodeToJsonElement(StorageSummary.serializer(), summary).jsonObject
     }
 
     suspend fun getHistory(
@@ -129,23 +323,13 @@ private fun defaultCategories(farmId: String): List<ReportCategoryStatus> = list
     ),
     ReportCategoryStatus(
         farmId = farmId,
-        categoryId = "cat-machinery",
-        code = "machinery",
-        name = "Machinery Report",
-        description = "Equipment usage, condition and maintenance",
+        categoryId = "cat-expenses",
+        code = "expenses",
+        name = "Farm Expenses Report",
+        description = "Operational costs, category breakdowns and supplier payments",
         sortOrder = 3,
-        lastReportId = "rep-machinery",
-        lastGeneratedAt = "2026-09-05T09:15:00Z",
-    ),
-    ReportCategoryStatus(
-        farmId = farmId,
-        categoryId = "cat-workforce",
-        code = "workforce",
-        name = "Workforce Report",
-        description = "Attendance and task completion by employee",
-        sortOrder = 4,
-        lastReportId = "rep-workforce",
-        lastGeneratedAt = "2026-09-08T16:45:00Z",
+        lastReportId = "rep-expenses",
+        lastGeneratedAt = "2026-09-11T16:00:00Z",
     ),
     ReportCategoryStatus(
         farmId = farmId,
@@ -153,141 +337,8 @@ private fun defaultCategories(farmId: String): List<ReportCategoryStatus> = list
         code = "storage",
         name = "Storage Report",
         description = "Stored produce, capacity and condition",
-        sortOrder = 5,
+        sortOrder = 4,
         lastReportId = "rep-storage",
         lastGeneratedAt = "2026-09-09T11:20:00Z",
     ),
 )
-
-fun createReportRecordModel(
-    farmId: String,
-    categoryCode: String,
-    periodStart: String?,
-    periodEnd: String?,
-): ReportRecord {
-    val start = periodStart?.ifBlank { null } ?: "2026-08-01"
-    val end = periodEnd?.ifBlank { null } ?: "2026-09-12"
-
-    val summaryJson: JsonObject = when (categoryCode.lowercase()) {
-        "inventory" -> {
-            val model = InventorySummary(
-                totalItems = 128,
-                outOfStockCount = 1,
-                lowStockCount = 3,
-                expiringSoonCount = 2,
-                expiredCount = 0,
-                byCategory = listOf(
-                    InventoryCategoryRow(category = "Fertilizer", items = 45, lowStock = 1, outOfStock = 0),
-                    InventoryCategoryRow(category = "Pesticide", items = 32, lowStock = 1, outOfStock = 1),
-                    InventoryCategoryRow(category = "Herbicide", items = 28, lowStock = 1, outOfStock = 0),
-                    InventoryCategoryRow(category = "Seeds", items = 23, lowStock = 0, outOfStock = 0),
-                ),
-                reorderAlerts = listOf(
-                    ReorderAlert(category = "Pesticide", itemId = "item-p1", name = "Lambdacyhalothrin", quantity = 2.0, unit = "Litres", reorderLevel = 10.0),
-                    ReorderAlert(category = "Fertilizer", itemId = "item-f1", name = "DAP 18-46-0", quantity = 15.0, unit = "Bags", reorderLevel = 20.0),
-                ),
-                expiryAlerts = listOf(
-                    ExpiryAlert(category = "Pesticide", itemId = "item-p2", name = "Mancozeb 800WP", quantity = 5.0, unit = "kg", expiryDate = "2026-10-15", isExpired = false),
-                ),
-            )
-            ReportJson.encodeToJsonElement(InventorySummary.serializer(), model).jsonObject
-        }
-
-        "machinery" -> {
-            val model = MachinerySummary(
-                usageSessions = 42,
-                totalHoursUsed = 340.5,
-                machinesUsed = 8,
-                fuelUsed = listOf(FuelRow(fuelUnit = "Litres", fuelUsed = 1250.0)),
-                byMachine = listOf(
-                    MachineUsageRow(machineryId = "John Deere 5075E", sessions = 18, hoursUsed = 180.0, fuelUsed = 720.0, latestCondition = "Good"),
-                    MachineUsageRow(machineryId = "Massey Ferguson 375", sessions = 14, hoursUsed = 110.0, fuelUsed = 380.0, latestCondition = "Fair"),
-                    MachineUsageRow(machineryId = "Mahindra 575 DI", sessions = 10, hoursUsed = 50.5, fuelUsed = 150.0, latestCondition = "Good"),
-                ),
-                maintenance = MaintenanceStats(recordsInPeriod = 6, totalCost = 85000.0),
-                maintenanceDue = listOf(
-                    MaintenanceDueRow(machineryId = "Massey Ferguson 375", lastMaintenanceType = "Oil Service", lastMaintenanceDate = "2026-06-15", nextMaintenanceDate = "2026-09-15", daysUntilDue = 3, isOverdue = false),
-                ),
-            )
-            ReportJson.encodeToJsonElement(MachinerySummary.serializer(), model).jsonObject
-        }
-
-        "workforce" -> {
-            val model = WorkforceSummary(
-                totalWorkers = 24,
-                totalHoursWorked = 1280.0,
-                activitiesAssigned = 65,
-                activitiesCompleted = 61,
-                overallCompletionRatePct = 93.8,
-                employees = listOf(
-                    EmployeeRow(workerProfileId = "w1", employeeNumber = "WRK-001", workerName = "John Mwangi", daysPresent = 22, activitiesAssigned = 15, activitiesCompleted = 15, hoursWorked = 176.0, completionRatePct = 100.0),
-                    EmployeeRow(workerProfileId = "w2", employeeNumber = "WRK-002", workerName = "Mary Wambui", daysPresent = 20, activitiesAssigned = 12, activitiesCompleted = 11, hoursWorked = 160.0, completionRatePct = 91.7),
-                    EmployeeRow(workerProfileId = "w3", employeeNumber = "WRK-003", workerName = "Peter Otieno", daysPresent = 21, activitiesAssigned = 14, activitiesCompleted = 13, hoursWorked = 168.0, completionRatePct = 92.9),
-                ),
-                activitiesByCategory = listOf(
-                    ActivityCategoryRow(category = "Spraying & Weeding", activities = 28, hours = 520.0),
-                    ActivityCategoryRow(category = "Harvesting", activities = 22, hours = 440.0),
-                    ActivityCategoryRow(category = "Ploughing & Tillage", activities = 15, hours = 320.0),
-                ),
-            )
-            ReportJson.encodeToJsonElement(WorkforceSummary.serializer(), model).jsonObject
-        }
-
-        "storage" -> {
-            val model = StorageSummary(
-                facilities = listOf(
-                    FacilityRow(facilityId = "f1", name = "Main Granary Silo A", facilityType = "Silo", capacityKg = 25000.0, storedKg = 18500.0, utilisationPct = 74.0, condition = "Good"),
-                    FacilityRow(facilityId = "f2", name = "Cold Storage Warehouse B", facilityType = "Cold Storage", capacityKg = 10000.0, storedKg = 4200.0, utilisationPct = 42.0, condition = "Optimal"),
-                    FacilityRow(facilityId = "f3", name = "Grain Depot Silo C", facilityType = "Silo", capacityKg = 30000.0, storedKg = 21000.0, utilisationPct = 70.0, condition = "Good"),
-                ),
-                produceByCrop = listOf(
-                    ProduceByCropRow(cropName = "White Maize", storedKg = 22500.0, lots = 5),
-                    ProduceByCropRow(cropName = "Tomatoes", storedKg = 4200.0, lots = 2),
-                    ProduceByCropRow(cropName = "Macadamia", storedKg = 17000.0, lots = 3),
-                ),
-                nearExpiryLots = listOf(
-                    NearExpiryRow(stockId = "stk-9", cropName = "Tomatoes", quantityKg = 1200.0, condition = "Fair", expiresOn = "2026-09-20"),
-                ),
-            )
-            ReportJson.encodeToJsonElement(StorageSummary.serializer(), model).jsonObject
-        }
-
-        else -> { // crop_yield
-            val model = CropYieldSummary(
-                totalPlantings = 8,
-                plantingsByStatus = listOf(StatusCount("active", 5), StatusCount("harvested", 3)),
-                harvestTotals = listOf(HarvestTotal(unit = "kg", quantity = 12500.0, harvests = 12)),
-                byCrop = listOf(
-                    CropYieldRow(cropName = "White Maize", unit = "kg", plantings = 3, harvested = 8000.0),
-                    CropYieldRow(cropName = "Tomatoes", unit = "kg", plantings = 2, harvested = 4500.0),
-                ),
-                byDivision = listOf(
-                    DivisionYieldRow(divisionId = "div-1", divisionName = "Division A", unit = "kg", plantings = 4, harvested = 7000.0),
-                    DivisionYieldRow(divisionId = "div-2", divisionName = "Division B", unit = "kg", plantings = 4, harvested = 5500.0),
-                ),
-                byQualityGrade = listOf(
-                    GradeRow(grade = "Grade A", unit = "kg", quantity = 9200.0),
-                    GradeRow(grade = "Grade B", unit = "kg", quantity = 3300.0),
-                ),
-                plantings = listOf(
-                    PlantingRow(plantingId = "p1", cropName = "White Maize", divisionName = "Division A", plantingDate = "2026-04-10", plantingStatus = "active", areaPlanted = 12.5, areaUnit = "Ha", harvested = 8000.0, harvests = 6),
-                    PlantingRow(plantingId = "p2", cropName = "Tomatoes", divisionName = "Division B", plantingDate = "2026-05-01", plantingStatus = "active", areaPlanted = 5.0, areaUnit = "Ha", harvested = 4500.0, harvests = 6),
-                ),
-            )
-            ReportJson.encodeToJsonElement(CropYieldSummary.serializer(), model).jsonObject
-        }
-    }
-
-    return ReportRecord(
-        reportId = "rep-$categoryCode",
-        farmId = farmId,
-        categoryId = "cat-$categoryCode",
-        generatedBy = "Manager",
-        periodStart = start,
-        periodEnd = end,
-        status = "completed",
-        summary = summaryJson,
-        fileUrl = null,
-        generatedAt = "2026-09-12T10:00:00Z",
-    )
-}

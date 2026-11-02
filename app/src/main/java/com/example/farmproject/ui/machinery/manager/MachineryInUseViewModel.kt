@@ -2,7 +2,6 @@ package com.example.farmproject.ui.machinery.manager
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.farmproject.data.model.Machinery
 import com.example.farmproject.data.model.MachineryUsage
 import com.example.farmproject.data.repository.MachineryRepository
 import com.example.farmproject.data.session.CurrentSession

@@ -1,7 +1,5 @@
 package com.example.farmproject.ui.activities.manager
 
-import com.example.farmproject.ui.common.DatePickerField
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,19 +20,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
-import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Agriculture
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
@@ -65,11 +60,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.farmproject.data.model.Division
 import com.example.farmproject.data.model.EmployeeDisplay
 import com.example.farmproject.data.model.Machinery
+import com.example.farmproject.ui.common.DatePickerField
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManagerAddFarmActivityScreen(
+    farmId: String = "",
     viewModel: FarmActivitiesViewModel = viewModel(),
     activityTypes: List<String> = listOf(
         "Planting",
@@ -85,6 +82,7 @@ fun ManagerAddFarmActivityScreen(
     workers: List<EmployeeDisplay> = emptyList(),
     supervisors: List<EmployeeDisplay> = emptyList(),
     onBackClick: () -> Unit = {},
+    onSaveSuccess: () -> Unit = {},
     onSaveClick: (
         activityTypeName: String,
         activityName: String?,
@@ -97,24 +95,51 @@ fun ManagerAddFarmActivityScreen(
         quantity: Double?,
         quantityUnit: String?,
         equipmentNeeded: String?
-    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _ -> }
+    ) -> Unit = { activityTypeName, activityName, dueDate, notes, assignedRole, workerProfileId, supervisorProfileId, divisionId, quantity, quantityUnit, equipmentNeeded ->
+        viewModel.addActivity(
+            activityTypeName = activityTypeName,
+            activityName = activityName,
+            activityDate = dueDate,
+            status = "Pending",
+            notes = notes,
+            assignedRole = assignedRole,
+            workerProfileId = workerProfileId,
+            supervisorProfileId = supervisorProfileId,
+            divisionId = divisionId,
+            quantity = quantity,
+            quantityUnit = quantityUnit,
+            equipmentNeeded = equipmentNeeded
+        )
+    }
 ) {
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
+    val formOptions by viewModel.formOptions.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadFormOptions()
+    }
 
     LaunchedEffect(saveState) {
         if (saveState is FarmActivitySaveState.Saved) {
             viewModel.resetSaveState()
+            onSaveSuccess()
             onBackClick()
         }
     }
 
+    val liveActivityTypes = formOptions.activityTypeNames.ifEmpty { activityTypes }
+    val liveDivisions = formOptions.divisions.ifEmpty { divisions }
+    val liveMachineryList = formOptions.machinery.ifEmpty { machineryList }
+    val liveWorkers = formOptions.workers.ifEmpty { workers }
+    val liveSupervisors = formOptions.supervisors.ifEmpty { supervisors }
+
     val todayDateStr = try {
         LocalDate.now().toString()
     } catch (_: Exception) {
-        "2026-03-30"
+        "2026-10-27"
     }
 
-    var activityType by remember { mutableStateOf("Planting") }
+    var activityType by remember { mutableStateOf(liveActivityTypes.firstOrNull() ?: "Planting") }
     var activityNameText by remember { mutableStateOf("") }
     var dueDate by remember { mutableStateOf(todayDateStr) }
     var notes by remember { mutableStateOf("") }
@@ -122,30 +147,27 @@ fun ManagerAddFarmActivityScreen(
     var selectedWorkerProfileId by remember { mutableStateOf<String?>(null) }
     var selectedSupervisorProfileId by remember { mutableStateOf<String?>(null) }
     var assigneeDropdownExpanded by remember { mutableStateOf(false) }
-    var quantityText by remember { mutableStateOf("") }
-    var quantityUnitText by remember { mutableStateOf("") }
-    var expectedHarvestDateText by remember { mutableStateOf("") }
-    var selectedMachineryName by remember { mutableStateOf("") }
 
-    var dueDateError by remember { mutableStateOf<String?>(null) }
-    var harvestDateError by remember { mutableStateOf<String?>(null) }
-
-    val isPlantingType = activityType.contains("Planting", ignoreCase = true) ||
-            activityType.contains("Transplanting", ignoreCase = true)
-
-    // Location: Entire Farm vs Specific Division
     var isEntireFarm by remember { mutableStateOf(true) }
-    var selectedDivision by remember { mutableStateOf<Division?>(divisions.firstOrNull()) }
-
-    var typeExpanded by remember { mutableStateOf(false) }
+    var selectedDivision by remember { mutableStateOf<Division?>(null) }
     var divisionExpanded by remember { mutableStateOf(false) }
+
+    var selectedMachineryName by remember { mutableStateOf("") }
     var machineryExpanded by remember { mutableStateOf(false) }
 
+    var quantityText by remember { mutableStateOf("") }
+    var quantityUnitText by remember { mutableStateOf("") }
+
+    var typeExpanded by remember { mutableStateOf(false) }
+
+    val isSaving = saveState is FarmActivitySaveState.Saving
+    val serverError = (saveState as? FarmActivitySaveState.Error)?.message
+
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Color(0xFF1565C0),
+        focusedBorderColor = Color(0xFF1B5E20),
         unfocusedBorderColor = Color(0xFFBDBDBD),
-        focusedLabelColor = Color(0xFF1565C0),
-        cursorColor = Color(0xFF1565C0)
+        focusedLabelColor = Color(0xFF1B5E20),
+        cursorColor = Color(0xFF1B5E20)
     )
 
     Scaffold(
@@ -154,11 +176,11 @@ fun ManagerAddFarmActivityScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1565C0))
+                    .background(Color(0xFF1B5E20))
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBackClick) {
+                IconButton(onClick = onBackClick, enabled = !isSaving) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
@@ -213,7 +235,7 @@ fun ManagerAddFarmActivityScreen(
                     readOnly = false,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                     label = { Text("Activity Type *") },
                     placeholder = { Text("Select or type activity type") },
                     leadingIcon = {
@@ -230,10 +252,10 @@ fun ManagerAddFarmActivityScreen(
                 )
 
                 ExposedDropdownMenu(
-                    expanded = typeExpanded && activityTypes.isNotEmpty(),
+                    expanded = typeExpanded && liveActivityTypes.isNotEmpty(),
                     onDismissRequest = { typeExpanded = false }
                 ) {
-                    activityTypes.forEach { item ->
+                    liveActivityTypes.forEach { item ->
                         DropdownMenuItem(
                             text = { Text(item) },
                             onClick = {
@@ -301,7 +323,7 @@ fun ManagerAddFarmActivityScreen(
             }
 
             // SPECIFIC EMPLOYEE DROPDOWN
-            val availableEmployees = if (assignedRole == "Worker") workers else supervisors
+            val availableEmployees = if (assignedRole == "Worker") liveWorkers else liveSupervisors
             val selectedProfileId = if (assignedRole == "Worker") selectedWorkerProfileId else selectedSupervisorProfileId
             val selectedEmployeeName = availableEmployees.find { it.profileId == selectedProfileId }?.let {
                 "${it.fullName}${if (!it.employeeNumber.isNullOrBlank()) " (${it.employeeNumber})" else ""}"
@@ -317,7 +339,7 @@ fun ManagerAddFarmActivityScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Select Specific $assignedRole") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = assigneeDropdownExpanded) },
                     colors = fieldColors,
@@ -385,8 +407,8 @@ fun ManagerAddFarmActivityScreen(
                         .fillMaxWidth()
                         .clickable {
                             isEntireFarm = false
-                            if (selectedDivision == null && divisions.isNotEmpty()) {
-                                selectedDivision = divisions.first()
+                            if (selectedDivision == null && liveDivisions.isNotEmpty()) {
+                                selectedDivision = liveDivisions.first()
                             }
                         }
                         .padding(vertical = 4.dp),
@@ -396,8 +418,8 @@ fun ManagerAddFarmActivityScreen(
                         selected = !isEntireFarm,
                         onClick = {
                             isEntireFarm = false
-                            if (selectedDivision == null && divisions.isNotEmpty()) {
-                                selectedDivision = divisions.first()
+                            if (selectedDivision == null && liveDivisions.isNotEmpty()) {
+                                selectedDivision = liveDivisions.first()
                             }
                         }
                     )
@@ -409,7 +431,7 @@ fun ManagerAddFarmActivityScreen(
                 }
 
                 if (!isEntireFarm) {
-                    if (divisions.isEmpty()) {
+                    if (liveDivisions.isEmpty()) {
                         Text(
                             text = "No farm divisions found. Task will apply to entire farm.",
                             style = MaterialTheme.typography.bodySmall,
@@ -428,7 +450,7 @@ fun ManagerAddFarmActivityScreen(
                                 readOnly = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(),
+                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                                 label = { Text("Division") },
                                 leadingIcon = {
                                     Icon(
@@ -447,7 +469,7 @@ fun ManagerAddFarmActivityScreen(
                                 expanded = divisionExpanded,
                                 onDismissRequest = { divisionExpanded = false }
                             ) {
-                                divisions.forEach { division ->
+                                liveDivisions.forEach { division ->
                                     DropdownMenuItem(
                                         text = { Text(division.name) },
                                         onClick = {
@@ -478,7 +500,7 @@ fun ManagerAddFarmActivityScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Machinery Item (optional)") },
                     leadingIcon = {
                         Icon(
@@ -504,11 +526,11 @@ fun ManagerAddFarmActivityScreen(
                             machineryExpanded = false
                         }
                     )
-                    machineryList.forEach { machine ->
+                    liveMachineryList.forEach { m ->
                         DropdownMenuItem(
-                            text = { Text(machine.name) },
+                            text = { Text(m.name) },
                             onClick = {
-                                selectedMachineryName = machine.name
+                                selectedMachineryName = m.name
                                 machineryExpanded = false
                             }
                         )
@@ -516,9 +538,9 @@ fun ManagerAddFarmActivityScreen(
                 }
             }
 
-            // QUANTITY & MEASUREMENT
+            // QUANTITY & MEASUREMENT (OPTIONAL)
             SectionTitle(
-                icon = Icons.Default.Numbers,
+                icon = Icons.AutoMirrored.Filled.Assignment,
                 title = "Quantity & Measurement"
             )
 
@@ -532,13 +554,7 @@ fun ManagerAddFarmActivityScreen(
                     modifier = Modifier.weight(1f),
                     label = { Text("Quantity") },
                     placeholder = { Text("e.g. 50") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Numbers,
-                            contentDescription = null
-                        )
-                    },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     colors = fieldColors,
                     shape = RoundedCornerShape(12.dp)
@@ -549,30 +565,8 @@ fun ManagerAddFarmActivityScreen(
                     onValueChange = { quantityUnitText = it },
                     modifier = Modifier.weight(1f),
                     label = { Text("Unit (optional)") },
-                    placeholder = { Text("e.g. Kg, Acres") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Straighten,
-                            contentDescription = null
-                        )
-                    },
+                    placeholder = { Text("e.g. kg, acres, litres") },
                     singleLine = true,
-                    colors = fieldColors,
-                    shape = RoundedCornerShape(12.dp)
-                )
-            }
-
-            if (isPlantingType) {
-                DatePickerField(
-                    value = expectedHarvestDateText,
-                    onValueChange = {
-                        expectedHarvestDateText = it
-                        harvestDateError = null
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "Expected Harvest Date",
-                    isError = harvestDateError != null,
-                    supportingText = harvestDateError?.let { { Text(it) } },
                     colors = fieldColors,
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -580,110 +574,63 @@ fun ManagerAddFarmActivityScreen(
 
             // SCHEDULE DETAILS
             SectionTitle(
-                icon = Icons.Default.CalendarMonth,
+                icon = Icons.AutoMirrored.Filled.Assignment,
                 title = "Schedule Details"
             )
 
             DatePickerField(
+                label = "Due Date *",
                 value = dueDate,
-                onValueChange = {
-                    dueDate = it
-                    dueDateError = null
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = "Due Date",
-                isError = dueDateError != null,
-                supportingText = dueDateError?.let { { Text(it) } },
-                colors = fieldColors,
-                shape = RoundedCornerShape(12.dp)
+                onValueChange = { dueDate = it }
             )
 
-            // NOTES
+            // ADDITIONAL INFORMATION
             SectionTitle(
-                icon = Icons.AutoMirrored.Filled.Notes,
+                icon = Icons.AutoMirrored.Filled.Assignment,
                 title = "Additional Information"
             )
 
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
+                modifier = Modifier.fillMaxWidth(),
                 label = { Text("Notes (optional)") },
-                placeholder = { Text("Enter any additional details or instructions...") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Notes,
-                        contentDescription = null
-                    )
-                },
-                maxLines = 5,
+                placeholder = { Text("Add instructions or notes for assigned workers...") },
+                minLines = 3,
                 colors = fieldColors,
                 shape = RoundedCornerShape(12.dp)
             )
 
-            if (saveState is FarmActivitySaveState.Error) {
+            if (!serverError.isNullOrBlank()) {
                 Text(
-                    text = (saveState as FarmActivitySaveState.Error).message,
+                    text = serverError,
                     color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // SAVE BUTTON
-            val isSaving = saveState is FarmActivitySaveState.Saving
-
             Button(
                 onClick = {
-                    if (isSaving) return@Button
-
-                    val today = try { LocalDate.now() } catch (_: Exception) { null }
-                    val dueParsed = try { LocalDate.parse(dueDate.trim()) } catch (_: Exception) { null }
-
-                    if (dueParsed != null && today != null && dueParsed.isBefore(today)) {
-                        dueDateError = "Due date cannot be in the past."
-                        return@Button
-                    }
-
-                    if (isPlantingType && expectedHarvestDateText.isNotBlank()) {
-                        val hParsed = try { LocalDate.parse(expectedHarvestDateText.trim()) } catch (_: Exception) { null }
-                        if (hParsed != null && today != null && hParsed.isBefore(today)) {
-                            harvestDateError = "Expected harvest date cannot be in the past."
-                            return@Button
-                        }
-                    }
-
-                    val finalType = activityType.ifBlank { "Planting" }
-                    val finalName = activityNameText.trim().ifBlank { null }
-                    val finalDate = dueDate.ifBlank { todayDateStr }
-                    val targetDivisionId = if (isEntireFarm) null else selectedDivision?.divisionId
-                    val parsedQuantity = quantityText.toDoubleOrNull()
-                    val parsedUnit = quantityUnitText.trim().ifBlank { null }
-                    val finalMachinery = selectedMachineryName.trim().ifBlank { null }
-
-                    val userNotes = notes.trim()
-                    val finalNotes = if (isPlantingType && expectedHarvestDateText.isNotBlank()) {
-                        val hDateNote = "Expected Harvest Date: ${expectedHarvestDateText.trim()}"
-                        if (userNotes.isNotBlank()) "$hDateNote\n$userNotes" else hDateNote
-                    } else {
-                        userNotes.ifBlank { null }
-                    }
+                    val finalDivId = if (isEntireFarm) null else selectedDivision?.divisionId
+                    val qtyVal = quantityText.trim().toDoubleOrNull()
+                    val qtyUnit = quantityUnitText.trim().ifBlank { null }
+                    val equip = selectedMachineryName.trim().ifBlank { null }
 
                     onSaveClick(
-                        finalType,
-                        finalName,
-                        finalDate,
-                        finalNotes,
+                        activityType,
+                        activityNameText.trim().ifBlank { null },
+                        dueDate,
+                        notes.trim().ifBlank { null },
                         assignedRole,
                         selectedWorkerProfileId,
                         selectedSupervisorProfileId,
-                        targetDivisionId,
-                        parsedQuantity,
-                        parsedUnit,
-                        finalMachinery
+                        finalDivId,
+                        qtyVal,
+                        qtyUnit,
+                        equip
                     )
                 },
                 enabled = !isSaving,
@@ -692,23 +639,27 @@ fun ManagerAddFarmActivityScreen(
                     .height(54.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1565C0)
+                    containerColor = Color(0xFF1B5E20)
                 )
             ) {
                 if (isSaving) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(22.dp),
                         color = Color.White,
                         strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Saving Task...",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Default.Save,
                         contentDescription = null
                     )
-
                     Spacer(modifier = Modifier.width(8.dp))
-
                     Text(
                         text = "Save Activity",
                         fontSize = 16.sp,
@@ -734,7 +685,7 @@ private fun SectionTitle(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF1565C0),
+            tint = Color(0xFF1B5E20),
             modifier = Modifier.size(22.dp)
         )
 

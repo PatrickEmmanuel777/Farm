@@ -34,6 +34,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
@@ -101,7 +102,7 @@ fun ManagerAddInventoryScreen(
 
     // Pesticide / Fungicide / Insecticide specific
     var subCategory by remember(initialCategory) {
-        mutableStateOf(if (initialCategory.isNotBlank()) initialCategory else "Insecticide")
+        mutableStateOf(initialCategory.ifBlank { "Insecticide" })
     }
     var formulation by remember(initialCategory) {
         val defaultFormulation = when {
@@ -190,10 +191,10 @@ fun ManagerAddInventoryScreen(
     )
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Color(0xFF1565C0),
+        focusedBorderColor = Color(0xFF1B5E20),
         unfocusedBorderColor = Color(0xFFBDBDBD),
-        focusedLabelColor = Color(0xFF1565C0),
-        cursorColor = Color(0xFF1565C0)
+        focusedLabelColor = Color(0xFF1B5E20),
+        cursorColor = Color(0xFF1B5E20)
     )
 
     val isFertilizer = categoryText.equals("Fertilizer", ignoreCase = true)
@@ -227,7 +228,7 @@ fun ManagerAddInventoryScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF1565C0))
+                    .background(Color(0xFF1B5E20))
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -278,7 +279,7 @@ fun ManagerAddInventoryScreen(
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     label = { Text("Category *") },
                     leadingIcon = {
                         Icon(
@@ -492,7 +493,7 @@ fun ManagerAddInventoryScreen(
                         readOnly = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                         label = { Text("Application timing") },
                         leadingIcon = {
                             Icon(
@@ -621,7 +622,7 @@ fun ManagerAddInventoryScreen(
                             readOnly = true,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor(),
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                             label = { Text("Rate unit") },
                             trailingIcon = {
                                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = rateUnitExpanded)
@@ -675,7 +676,7 @@ fun ManagerAddInventoryScreen(
                         readOnly = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                         label = { Text("Formulation") },
                         leadingIcon = {
                             Icon(
@@ -815,7 +816,7 @@ fun ManagerAddInventoryScreen(
                             readOnly = true,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor(),
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                             label = { Text("Rate unit") },
                             trailingIcon = {
                                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = rateUnitExpanded)
@@ -923,7 +924,7 @@ fun ManagerAddInventoryScreen(
                         onValueChange = { unit = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                         label = { Text("Unit *") },
                         placeholder = { Text(if (isFungicide) "kg" else "litres") },
                         leadingIcon = {
@@ -1027,7 +1028,7 @@ fun ManagerAddInventoryScreen(
                     onValueChange = { storageLocation = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                     label = { Text("Storage location") },
                     placeholder = { Text("Select store") },
                     leadingIcon = {
@@ -1196,7 +1197,7 @@ fun ManagerAddInventoryScreen(
                         .height(52.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1565C0)
+                        containerColor = Color(0xFF1B5E20)
                     )
                 ) {
                     Icon(

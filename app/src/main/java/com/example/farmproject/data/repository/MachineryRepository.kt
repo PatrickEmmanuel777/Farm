@@ -14,7 +14,7 @@ class MachineryRepository(
     private val client: SupabaseClient = SupabaseClientProvider.client
 ) {
     suspend fun getMachineryForFarm(farmId: String): List<Machinery> {
-        val targetFarmId = if (farmId.isNotBlank()) farmId else CurrentSession.ensureFarmId(client)
+        val targetFarmId = farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         return try {
             client.from("machinery")
                 .select {
@@ -43,7 +43,7 @@ class MachineryRepository(
     }
 
     suspend fun insertMachinery(machinery: Machinery): Machinery {
-        val resolvedFarmId = if (machinery.farmId.isNotBlank()) machinery.farmId else CurrentSession.ensureFarmId(client)
+        val resolvedFarmId = machinery.farmId.ifBlank { CurrentSession.ensureFarmId(client) }
         val cleanMachinery = machinery.copy(
             machineryId = machinery.machineryId ?: UUID.randomUUID().toString(),
             farmId = resolvedFarmId,
@@ -112,6 +112,7 @@ class MachineryRepository(
     }
 
     /** Voids a usage record rather than deleting it — matches the schema's audit-trail intent. */
+    @Suppress("unused")
     suspend fun voidMachineryUsage(usageId: String, voidedBy: String, reason: String) {
         client.from("machinery_usage")
             .update(
@@ -153,6 +154,7 @@ class MachineryRepository(
     }
 
     /** Cancels a maintenance record rather than deleting it. */
+    @Suppress("unused")
     suspend fun cancelMaintenance(maintenanceId: String, cancelledBy: String, reason: String) {
         client.from("machinery_maintenance")
             .update(
